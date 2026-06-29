@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -53,13 +53,50 @@ const DURUM_BADGE: Record<IhaleDurumu, { etiket: string; cls: string }> = {
 
 type Sekme = "ihaleler" | "teklifler";
 
+// ─── Ödeme başarı bildirimi (useSearchParams Suspense gerektirir) ─────────────
+
+function OdemeBildirimi() {
+  const searchParams = useSearchParams();
+  const [goster, setGoster] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("odeme") === "basarili") {
+      setGoster(true);
+      const t = setTimeout(() => setGoster(false), 6000);
+      return () => clearTimeout(t);
+    }
+  }, [searchParams]);
+
+  if (!goster) return null;
+
+  return (
+    <div className="bg-green-50 border border-green-200 rounded-2xl px-5 py-4 mb-5 flex items-center gap-4">
+      <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <div className="flex-1">
+        <p className="text-sm font-semibold text-green-800">Ödeme başarıyla tamamlandı!</p>
+        <p className="text-xs text-green-700 mt-0.5">Paketiniz hesabınıza tanımlandı, anında kullanıma hazır.</p>
+      </div>
+      <button
+        onClick={() => setGoster(false)}
+        className="text-green-500 hover:text-green-700 p-1 rounded-lg hover:bg-green-100 transition-colors flex-shrink-0"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 // ─── Ana bileşen ─────────────────────────────────────────────────────────────
 
 export default function PanelSayfasi() {
   const router      = useRouter();
-  const searchParams = useSearchParams();
   const [kullanici,  setKullanici]  = useState<User | null | undefined>(undefined);
-  const [odemeBildirim, setOdemeBildirim] = useState(false);
   const [ihaleler,   setIhaleler]   = useState<Ihale[]>([]);
   const [teklifler,  setTeklifler]  = useState<PanelTeklif[]>([]);
   const [kalanHak,   setKalanHak]   = useState<number | null>(null);
@@ -103,15 +140,6 @@ export default function PanelSayfasi() {
     });
     return () => subscription.unsubscribe();
   }, []);
-
-  // Ödeme başarı bildirimi
-  useEffect(() => {
-    if (searchParams.get("odeme") === "basarili") {
-      setOdemeBildirim(true);
-      const t = setTimeout(() => setOdemeBildirim(false), 6000);
-      return () => clearTimeout(t);
-    }
-  }, [searchParams]);
 
   async function handleSil(id: string) {
     if (!confirm("Bu ihaleyi silmek istediğinizden emin misiniz?")) return;
@@ -164,27 +192,9 @@ export default function PanelSayfasi() {
       </div>
 
       {/* ─── Ödeme Başarı Bildirimi ─── */}
-      {odemeBildirim && (
-        <div className="bg-green-50 border border-green-200 rounded-2xl px-5 py-4 mb-5 flex items-center gap-4">
-          <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-green-800">Ödeme başarıyla tamamlandı!</p>
-            <p className="text-xs text-green-700 mt-0.5">Paketiniz hesabınıza tanımlandı, anında kullanıma hazır.</p>
-          </div>
-          <button
-            onClick={() => setOdemeBildirim(false)}
-            className="text-green-500 hover:text-green-700 p-1 rounded-lg hover:bg-green-100 transition-colors flex-shrink-0"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
+      <Suspense fallback={null}>
+        <OdemeBildirimi />
+      </Suspense>
 
       {/* ─── Premium Uyarısı ─── */}
       {yaklasanIhaleler.length > 0 && (
