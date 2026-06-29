@@ -1,0 +1,110 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { odemeOlustur } from "@/lib/iyzico";
+
+// Paket → fiyat ve Supabase güncelleme bilgisi
+const PAKET: Record<string, {
+  fiyat: string;
+  aciklama: string;
+  tip: "plan" | "teklif";
+  plan?: string;
+  teklif_hak?: number;
+}> = {
+  premium:   { fiyat: "500.00",  aciklama: "Premium Üyelik (1 ay)",    tip: "plan",   plan: "premium"  },
+  kurumsal:  { fiyat: "2499.00", aciklama: "Kurumsal Üyelik (1 ay)",   tip: "plan",   plan: "kurumsal" },
+  baslangic: { fiyat: "299.00",  aciklama: "Başlangıç Teklif Paketi",  tip: "teklif", teklif_hak: 5    },
+  standart:  { fiyat: "699.00",  aciklama: "Standart Teklif Paketi",   tip: "teklif", teklif_hak: 15   },
+  pro:       { fiyat: "1499.00", aciklama: "Pro Teklif Paketi (1 ay)", tip: "teklif", teklif_hak: 99999 },
+};
+
+function supabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  );
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { paket, kart, kullaniciId, email } = body as {
+      paket: string;
+      kart: { kartSahibi: string; kartNo: string; sonAy: string; sonYil: string; cvv: string };
+      kullaniciId: string;
+      email: string;
+    };
+
+    if (!paket || !kart || !kullaniciId || !email) {
+      return NextResponse.json({ hata: "Eksik parametreler." }, { status: 400 });
+    }
+
+    const paketBilgi = PAKET[paket];
+    if (!paketBilgi) {
+      return NextResponse.json({ hata: "Geçersiz paket." }, { status: 400 });
+    }
+
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+      req.headers.get("x-real-ip") ??
+      "127.0.0.1";
+
+    // ─── Iyzico ödeme ───────────────────────────────────────────────────────
+    const sonuc = await odemeOlustur({
+      paket,
+      fiyat:    paketBilgi.fiyat,
+      aciklama: paketBilgi.aciklama,
+      kart,
+      kullaniciId,
+      email,
+      ip,
+    });
+
+    if (sonuc.status !== "success") {
+      return NextResponse.json(
+        { hata: sonuc.errorMessage ?? "Ödeme işlemi başarısız oldu.", errorCode: sonuc.errorCode },
+        { status: 400 }
+      );
+    }
+
+    // ─── Ödeme başarılı → Supabase güncelle ─────────────────────────────────
+    const db = supabaseAdmin();
+
+    if (paketBilgi.tip === "plan" && paketBilgi.plan) {
+      const bitisTarihi = new Date();
+      bitisTarihi.setDate(bitisTarihi.getDate() + 30);
+
+      const { error } = await db.from("kullanicilar").update({
+        plan_turu:             paketBilgi.plan,
+        premium_bitis_tarihi:  bitisTarihi.toISOString(),
+      }).eq("id", kullaniciId);
+
+      if (error) console.error("Plan güncelleme hatası:", error);
+
+    } else if (paketBilgi.tip === "teklif" && paketBilgi.teklif_hak !== undefined) {
+      if (paketBilgi.teklif_hak >= 99999) {
+        // Pro → sınırsız
+        await db.from("kullanicilar")
+          .update({ kalan_teklif_hakki: 99999 })
+          .eq("id", kullaniciId);
+      } else {
+        // Mevcut hakkı artır (race-safe: Supabase RPC ile)
+        const { data } = await db.from("kullanicilar")
+          .select("kalan_teklif_hakki")
+          .eq("id", kullaniciId)
+          .single();
+
+        const yeniHak = (data?.kalan_teklif_hakki ?? 0) + paketBilgi.teklif_hak;
+        await db.from("kullanicilar")
+          .update({ kalan_teklif_hakki: yeniHak })
+          .eq("id", kullaniciId);
+      }
+    }
+
+    return NextResponse.json({ basarili: true, paymentId: sonuc.paymentId });
+
+  } catch (err) {
+    console.error("Ödeme sunucu hatası:", err);
+    return NextResponse.json({ hata: "Sunucu hatası oluştu, lütfen tekrar deneyin." }, { status: 500 });
+  }
+}
