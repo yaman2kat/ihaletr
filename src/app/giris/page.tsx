@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 function ceviriHata(mesaj: string): string {
@@ -13,11 +13,18 @@ function ceviriHata(mesaj: string): string {
   return "Giriş yapılamadı. Lütfen tekrar deneyin.";
 }
 
-export default function GirisSayfasi() {
+function GirisForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [form, setForm]             = useState({ email: "", sifre: "" });
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata]             = useState("");
+
+  useEffect(() => {
+    const urlHata = searchParams.get("hata");
+    if (urlHata) setHata(decodeURIComponent(urlHata));
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -77,10 +84,7 @@ export default function GirisSayfasi() {
                 <label className="block text-sm font-medium text-gray-700" htmlFor="sifre">
                   Şifre
                 </label>
-                <Link
-                  href="/sifremi-unuttum"
-                  className="text-sm text-blue-700 hover:underline"
-                >
+                <Link href="/sifremi-unuttum" className="text-sm text-blue-700 hover:underline">
                   Şifremi Unuttum
                 </Link>
               </div>
@@ -122,5 +126,15 @@ export default function GirisSayfasi() {
         </div>
       </div>
     </div>
+  );
+}
+
+import { Suspense } from "react";
+
+export default function GirisSayfasi() {
+  return (
+    <Suspense fallback={<div className="min-h-[calc(100vh-8rem)]" />}>
+      <GirisForm />
+    </Suspense>
   );
 }
