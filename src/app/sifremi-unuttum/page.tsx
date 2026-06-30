@@ -17,7 +17,7 @@ export default function SifremiUnuttum() {
 
     const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/sifre-sifirla`,
+      redirectTo: "https://ihaletr-61r6.vercel.app/sifre-sifirla",
     });
 
     setYukleniyor(false);
