@@ -31,7 +31,10 @@ export default function IhaleOlustur() {
     baslik: "", kategori: "", aciklama: "",
     kurum: "", sehir: "", ilce: "", adaNo: "", parselNo: "",
     baslangicFiyati: "", bitisTarihi: "",
+    yapiInsaatRuhsati: "" as "" | "var" | "yok",
+    proje: "" as "" | "var" | "yok",
   });
+  const [eksikAlanlar, setEksikAlanlar] = useState<string[]>([]);
   const [adaParselBildirim, setAdaParselBildirim] = useState(false);
   const [dosyalar, setDosyalar] = useState<{
     sartname: File | null;
@@ -61,10 +64,35 @@ export default function IhaleOlustur() {
     return () => subscription.unsubscribe();
   }, []);
 
+  function dogrula(): string[] {
+    const eksik: string[] = [];
+    if (!form.baslik.trim())          eksik.push("İhale Başlığı");
+    if (!form.kategori)               eksik.push("Kategori");
+    if (!form.aciklama.trim())        eksik.push("Açıklama");
+    if (!form.kurum.trim())           eksik.push("Kurum / Firma");
+    if (!form.sehir)                  eksik.push("Şehir");
+    if (!form.baslangicFiyati)        eksik.push("Başlangıç Fiyatı");
+    if (!form.bitisTarihi)            eksik.push("Son Teklif Tarihi");
+    if (!form.yapiInsaatRuhsati)      eksik.push("Yapı İnşaat Ruhsatı");
+    if (!form.proje)                  eksik.push("Proje");
+    if (!dosyalar.sartname)           eksik.push("Yapı Şartnamesi");
+    if (!dosyalar.sozlesme)           eksik.push("Sözleşme Tasarısı");
+    if (form.proje === "var" && !dosyalar.proje) eksik.push("Bina Projesi (Proje Var seçildi)");
+    return eksik;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!kullanici) return;
     setHata("");
+    setEksikAlanlar([]);
+
+    const eksik = dogrula();
+    if (eksik.length > 0) {
+      setEksikAlanlar(eksik);
+      return;
+    }
+
     setYukleniyor(true);
 
     const supabase = createClient();
@@ -83,9 +111,11 @@ export default function IhaleOlustur() {
         parsel_no:        form.parselNo || null,
         baslangic_fiyati: Number(form.baslangicFiyati),
         baslangic_tarihi: new Date().toISOString().split("T")[0],
-        bitis_tarihi:     form.bitisTarihi,
-        durum:            "beklemede",
-        olusturan_id:     kullanici.id,
+        bitis_tarihi:           form.bitisTarihi,
+        durum:                  "beklemede",
+        yapi_insaat_ruhsati:    form.yapiInsaatRuhsati || null,
+        proje:                  form.proje || null,
+        olusturan_id:           kullanici.id,
       })
       .select("id")
       .single();
@@ -219,7 +249,18 @@ export default function IhaleOlustur() {
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-6">{hata}</div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        {eksikAlanlar.length > 0 && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-4 mb-6">
+            <p className="font-semibold mb-2">Lütfen aşağıdaki alanları doldurun:</p>
+            <ul className="list-disc list-inside flex flex-col gap-1">
+              {eksikAlanlar.map((alan) => (
+                <li key={alan}>{alan}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               İhale Başlığı <span className="text-red-500">*</span>
@@ -350,6 +391,53 @@ export default function IhaleOlustur() {
             </button>
           </div>
 
+          {/* Belge Durumu */}
+          <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
+            <p className="text-sm font-semibold text-gray-700 mb-3">Belge Durumu</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Yapı İnşaat Ruhsatı <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-6">
+                  {(["var", "yok"] as const).map((secenek) => (
+                    <label key={secenek} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="yapiInsaatRuhsati"
+                        value={secenek}
+                        checked={form.yapiInsaatRuhsati === secenek}
+                        onChange={() => guncelle("yapiInsaatRuhsati", secenek)}
+                        className="text-blue-600 w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-700">{secenek === "var" ? "Var" : "Yok"}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Proje <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-6">
+                  {(["var", "yok"] as const).map((secenek) => (
+                    <label key={secenek} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="proje"
+                        value={secenek}
+                        checked={form.proje === secenek}
+                        onChange={() => guncelle("proje", secenek)}
+                        className="text-blue-600 w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-700">{secenek === "var" ? "Var" : "Yok"}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -398,12 +486,15 @@ export default function IhaleOlustur() {
                 dosya={dosyalar.sozlesme}
                 onChange={(f) => setDosyalar((d) => ({ ...d, sozlesme: f }))}
               />
-              <DosyaAlani
-                label="Bina Projesi"
-                kabul=".pdf,.dwg"
-                dosya={dosyalar.proje}
-                onChange={(f) => setDosyalar((d) => ({ ...d, proje: f }))}
-              />
+              {form.proje === "var" && (
+                <DosyaAlani
+                  label="Bina Projesi"
+                  kabul=".pdf,.dwg"
+                  zorunlu
+                  dosya={dosyalar.proje}
+                  onChange={(f) => setDosyalar((d) => ({ ...d, proje: f }))}
+                />
+              )}
               <DosyaAlani
                 label="Tapu Fotokopisi"
                 kabul=".pdf,.jpg,.jpeg"

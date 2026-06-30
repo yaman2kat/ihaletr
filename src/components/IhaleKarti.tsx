@@ -59,13 +59,36 @@ export default function IhaleKarti({ ihale }: { ihale: Ihale }) {
 
       <p className="text-sm text-gray-600 line-clamp-2">{ihale.aciklama}</p>
 
+      {(ihale.yapi_insaat_ruhsati || ihale.proje) && (
+        <div className="flex flex-wrap gap-2">
+          {ihale.yapi_insaat_ruhsati && (
+            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+              ihale.yapi_insaat_ruhsati === "var"
+                ? "bg-green-100 text-green-700"
+                : "bg-gray-100 text-gray-500"
+            }`}>
+              Ruhsat: {ihale.yapi_insaat_ruhsati === "var" ? "Var" : "Yok"}
+            </span>
+          )}
+          {ihale.proje && (
+            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+              ihale.proje === "var"
+                ? "bg-blue-100 text-blue-700"
+                : "bg-gray-100 text-gray-500"
+            }`}>
+              Proje: {ihale.proje === "var" ? "Var" : "Yok"}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="border-t border-gray-100 pt-4 grid grid-cols-2 gap-3 text-sm">
         <div>
           <p className="text-gray-400 text-xs mb-0.5">Başlangıç Fiyatı</p>
           <p className="font-semibold text-gray-900">{formatPara(ihale.baslangic_fiyati)}</p>
         </div>
         <div>
-          <p className="text-gray-400 text-xs mb-0.5">Güncel Teklif</p>
+          <p className="text-gray-400 text-xs mb-0.5">En Düşük Teklif</p>
           <p className="font-semibold text-blue-700">
             {ihale.mevcut_teklif ? formatPara(ihale.mevcut_teklif) : "Henüz yok"}
           </p>

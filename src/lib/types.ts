@@ -99,6 +99,8 @@ export interface Ihale {
   ilce?: string;
   ada_no?: string;
   parsel_no?: string;
+  yapi_insaat_ruhsati?: "var" | "yok";
+  proje?: "var" | "yok";
   goruntulenme_sayisi?: number;
   created_at: string;
 }

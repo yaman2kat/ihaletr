@@ -134,6 +134,35 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
             </div>
           </div>
 
+          {/* Belge Durumu */}
+          {(ihale.yapi_insaat_ruhsati || ihale.proje) && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-4">Belge Durumu</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {ihale.yapi_insaat_ruhsati && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-xs text-gray-400 mb-1">Yapı İnşaat Ruhsatı</p>
+                    <p className={`font-semibold text-sm ${
+                      ihale.yapi_insaat_ruhsati === "var" ? "text-green-700" : "text-red-600"
+                    }`}>
+                      {ihale.yapi_insaat_ruhsati === "var" ? "✓ Var" : "✗ Yok"}
+                    </p>
+                  </div>
+                )}
+                {ihale.proje && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-xs text-gray-400 mb-1">Proje</p>
+                    <p className={`font-semibold text-sm ${
+                      ihale.proje === "var" ? "text-green-700" : "text-red-600"
+                    }`}>
+                      {ihale.proje === "var" ? "✓ Var" : "✗ Yok"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Taşınmaz Bilgileri + Ada-Parsel butonu */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">

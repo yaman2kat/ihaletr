@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { KullaniciRol } from "@/lib/types";
 
@@ -18,6 +19,7 @@ function ceviriHata(mesaj: string): string {
 }
 
 export default function KayitSayfasi() {
+  const router = useRouter();
   const [rol, setRol] = useState<KullaniciRol | null>(null);
   const [form, setForm] = useState({
     adSoyad:     "",
@@ -56,6 +58,7 @@ export default function KayitSayfasi() {
       email:    form.email,
       password: form.sifre,
       options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/panel`,
         data: {
           ad_soyad:  form.adSoyad,
           firma_adi: form.firmaAdi || null,
@@ -66,8 +69,18 @@ export default function KayitSayfasi() {
     });
 
     if (error) {
+      console.error("Kayıt hatası:", error.message, error);
       setYukleniyor(false);
-      setHata(ceviriHata(error.message));
+      setHata(ceviriHata(error.message) + ` (${error.message})`);
+      return;
+    }
+
+    console.log("signUp başarılı — user:", data.user?.id, "session:", !!data.session, "email_confirmed_at:", data.user?.email_confirmed_at);
+
+    // Email doğrulaması kapalıysa session hemen döner → doğrudan panele yönlendir
+    if (data.session) {
+      router.push("/panel");
+      router.refresh();
       return;
     }
 
@@ -86,13 +99,12 @@ export default function KayitSayfasi() {
           kazanilan_ihale_sayisi:  0,
           aktif_ihale_sayisi:      0,
         });
-      } catch {
-        // Email doğrulaması gerektiren ortamlarda session henüz yok;
-        // kullanıcı giriş yaptıktan sonra profil tamamlanabilir.
+      } catch (profileErr) {
+        console.warn("Müteahhit profili oluşturulamadı (email doğrulama sonrası denenebilir):", profileErr);
       }
       setBasariliId(data.user.id);
     } else {
-      setBasariliId("arsa_sahibi");
+      setBasariliId(data.user?.id ?? "arsa_sahibi");
     }
 
     setYukleniyor(false);
@@ -114,8 +126,11 @@ export default function KayitSayfasi() {
             <p className="text-gray-500 mb-2">
               <span className="font-medium text-gray-700">{form.email}</span> adresine bir doğrulama bağlantısı gönderdik.
             </p>
-            <p className="text-gray-400 text-sm mb-6">
+            <p className="text-gray-400 text-sm mb-1">
               Bağlantıya tıkladıktan sonra giriş yapabilirsiniz.
+            </p>
+            <p className="text-gray-400 text-xs mb-6">
+              Mail gelmiyorsa spam / gereksiz posta klasörünüzü kontrol edin.
             </p>
             {isMuteahhit && (
               <p className="text-sm text-blue-700 bg-blue-50 rounded-lg px-4 py-3 mb-6">

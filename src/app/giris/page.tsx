@@ -15,9 +15,9 @@ function ceviriHata(mesaj: string): string {
 
 export default function GirisSayfasi() {
   const router = useRouter();
-  const [form, setForm]           = useState({ email: "", sifre: "" });
+  const [form, setForm]             = useState({ email: "", sifre: "" });
   const [yukleniyor, setYukleniyor] = useState(false);
-  const [hata, setHata]           = useState("");
+  const [hata, setHata]             = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,6 +31,7 @@ export default function GirisSayfasi() {
     });
 
     if (error) {
+      console.error("Giriş hatası:", error);
       setHata(ceviriHata(error.message));
       setYukleniyor(false);
       return;
@@ -76,7 +77,10 @@ export default function GirisSayfasi() {
                 <label className="block text-sm font-medium text-gray-700" htmlFor="sifre">
                   Şifre
                 </label>
-                <Link href="/sifremi-unuttum" className="text-sm text-blue-700 hover:underline">
+                <Link
+                  href="/sifremi-unuttum"
+                  className="text-sm text-blue-700 hover:underline"
+                >
                   Şifremi Unuttum
                 </Link>
               </div>
