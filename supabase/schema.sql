@@ -3,6 +3,32 @@
 -- Supabase Dashboard > SQL Editor > New Query'e yapıştırıp çalıştırın.
 -- ============================================================
 
+-- ============================================================
+-- RESET — Mevcut tabloları ve enum tiplerini tamamen siler.
+-- DİKKAT: Bu blok mevcut TÜM VERİYİ kalıcı ve geri döndürülemez
+-- şekilde siler. Sadece sıfırdan kurulum / şemayı tamamen
+-- yeniden oluşturmak isterken çalıştırın.
+-- ============================================================
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
+DROP TABLE IF EXISTS public.muteahhit_yorumlar          CASCADE;
+DROP TABLE IF EXISTS public.muteahhit_referans_projeler CASCADE;
+DROP TABLE IF EXISTS public.muteahhit_profiller         CASCADE;
+DROP TABLE IF EXISTS public.danishman_gorusme_talepleri CASCADE;
+DROP TABLE IF EXISTS public.danishman_yorumlar          CASCADE;
+DROP TABLE IF EXISTS public.belgeler                    CASCADE;
+DROP TABLE IF EXISTS public.teklifler                   CASCADE;
+DROP TABLE IF EXISTS public.danishmanlar                CASCADE;
+DROP TABLE IF EXISTS public.ihaleler                    CASCADE;
+DROP TABLE IF EXISTS public.kullanicilar                CASCADE;
+
+DROP TYPE IF EXISTS kullanici_rol   CASCADE;
+DROP TYPE IF EXISTS ihale_durumu    CASCADE;
+DROP TYPE IF EXISTS teklif_durumu   CASCADE;
+DROP TYPE IF EXISTS belge_turu      CASCADE;
+DROP TYPE IF EXISTS gorusme_durumu  CASCADE;
+
 -- ------------------------------------------------------------
 -- 0. ENUM TİPLERİ
 -- ------------------------------------------------------------
@@ -93,8 +119,15 @@ ALTER TABLE public.ihaleler ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Herkes ihaleleri gorebilir"
   ON public.ihaleler FOR SELECT USING (true);
 
-CREATE POLICY "Giris yapan ihale olusturabilir"
-  ON public.ihaleler FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+-- GEÇİCİ: Giriş yapmadan da ihale oluşturulabilsin diye misafir kullanıcılara izin verildi.
+-- Eski (giriş zorunlu) hali:
+-- CREATE POLICY "Giris yapan ihale olusturabilir"
+--   ON public.ihaleler FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "Giris yapan ya da misafir ihale olusturabilir"
+  ON public.ihaleler FOR INSERT WITH CHECK (
+    (auth.uid() IS NOT NULL AND (olusturan_id IS NULL OR olusturan_id = auth.uid()))
+    OR (auth.uid() IS NULL AND olusturan_id IS NULL)
+  );
 
 CREATE POLICY "Olusturan ihalesini guncelleyebilir"
   ON public.ihaleler FOR UPDATE USING (auth.uid() = olusturan_id);
@@ -109,7 +142,9 @@ CREATE POLICY "Olusturan ihalesini silebilir"
 CREATE TABLE public.teklifler (
   id            uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
   ihale_id      uuid          NOT NULL REFERENCES public.ihaleler(id) ON DELETE CASCADE,
-  kullanici_id  uuid          NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  -- GEÇİCİ: Misafir teklifleri için NOT NULL kaldırıldı. Eski hali:
+  -- kullanici_id  uuid          NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  kullanici_id  uuid          REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
   tutar         numeric(15,2) NOT NULL CHECK (tutar > 0),
   aciklama      text,
   durum         teklif_durumu NOT NULL DEFAULT 'beklemede',
@@ -129,10 +164,24 @@ CREATE POLICY "Ihale sahibi ve teklif sahibi teklifleri gorebilir"
     OR auth.uid() = (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
   );
 
-CREATE POLICY "Giris yapan teklif verebilir"
+-- GEÇİCİ: Giriş yapmadan da teklif verilebilsin diye misafir kullanıcılara izin verildi.
+-- Eski (giriş zorunlu) hali:
+-- CREATE POLICY "Giris yapan teklif verebilir"
+--   ON public.teklifler FOR INSERT WITH CHECK (
+--     auth.uid() = kullanici_id
+--     AND auth.uid() != (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
+--   );
+CREATE POLICY "Giris yapan ya da misafir teklif verebilir"
   ON public.teklifler FOR INSERT WITH CHECK (
-    auth.uid() = kullanici_id
-    AND auth.uid() != (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
+    (
+      auth.uid() IS NOT NULL
+      AND auth.uid() = kullanici_id
+      AND auth.uid() != (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
+    )
+    OR (
+      auth.uid() IS NULL
+      AND kullanici_id IS NULL
+    )
   );
 
 CREATE POLICY "Teklif sahibi teklifini silebilir"
@@ -227,8 +276,14 @@ ALTER TABLE public.belgeler ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Belgeler herkese acik"
   ON public.belgeler FOR SELECT USING (true);
 
-CREATE POLICY "Giris yapan belge yukleyebilir"
-  ON public.belgeler FOR INSERT WITH CHECK (auth.uid() = yukleyen_id);
+-- GEÇİCİ: Misafir kullanıcıların da belge yükleyebilmesi için genişletildi. Eski hali:
+-- CREATE POLICY "Giris yapan belge yukleyebilir"
+--   ON public.belgeler FOR INSERT WITH CHECK (auth.uid() = yukleyen_id);
+CREATE POLICY "Giris yapan ya da misafir belge yukleyebilir"
+  ON public.belgeler FOR INSERT WITH CHECK (
+    (auth.uid() IS NOT NULL AND auth.uid() = yukleyen_id)
+    OR (auth.uid() IS NULL AND yukleyen_id IS NULL)
+  );
 
 CREATE POLICY "Yukleyen kendi belgesini silebilir"
   ON public.belgeler FOR DELETE USING (auth.uid() = yukleyen_id);

@@ -32,7 +32,7 @@ const PLANLAR: Plan[] = [
       { metin: "Maksimum 5 gün ihale süresi",        dahil: true  },
       { metin: "Standart danışman eşleştirmesi",     dahil: true  },
       { metin: "E-posta desteği",                    dahil: true  },
-      { metin: "Süre uzatma (30 gün × 3)",           dahil: false },
+      { metin: "Süre uzatma",                        dahil: false },
       { metin: "Sınırsız aktif ihale",               dahil: false },
       { metin: "Teklifçi analitikleri",              dahil: false },
       { metin: "Öncelikli destek",                   dahil: false },
@@ -49,8 +49,8 @@ const PLANLAR: Plan[] = [
     ctaHref: "/odeme/premium",
     ozellikler: [
       { metin: "Sınırsız aktif ihale",               dahil: true },
-      { metin: "90 güne kadar ihale süresi",         dahil: true },
-      { metin: "30 günlük süre uzatma (maks 90 gün)", dahil: true },
+      { metin: "45 güne kadar ihale süresi",         dahil: true },
+      { metin: "45 güne kadar uzatma",               dahil: true },
       { metin: "Öncelikli danışman eşleştirmesi",    dahil: true },
       { metin: "Teklifçi analitikleri",              dahil: true },
       { metin: "Öncelikli e-posta & telefon desteği", dahil: true },
@@ -69,6 +69,8 @@ const PLANLAR: Plan[] = [
     ctaHref: "/odeme/kurumsal",
     ozellikler: [
       { metin: "Premium'ın tüm özellikleri",         dahil: true },
+      { metin: "90 güne kadar ihale süresi",         dahil: true },
+      { metin: "90 güne kadar uzatma",               dahil: true },
       { metin: "Çoklu kullanıcı hesabı (10 kişi)",  dahil: true },
       { metin: "Özel danışman havuzu",               dahil: true },
       { metin: "Özel API entegrasyonu",              dahil: true },
@@ -186,8 +188,8 @@ export default function PremiumSayfasi() {
             <tbody className="divide-y divide-gray-50">
               {[
                 ["Aktif ihale sayısı",       "1",           "Sınırsız",    "Sınırsız"],
-                ["Maksimum ihale süresi",    "5 gün",       "90 gün",      "90 gün"],
-                ["Süre uzatma",              "—",           "30 gün × 3",  "30 gün × 3"],
+                ["Maksimum ihale süresi",    "5 gün",       "45 gün",      "90 gün"],
+                ["Süre uzatma",              "—",           "45 güne kadar", "90 güne kadar"],
                 ["Danışman eşleştirmesi",    "Standart",    "Öncelikli",   "Özel havuz"],
                 ["Teklifçi analitikleri",    "—",           "✓",           "✓"],
                 ["Kullanıcı sayısı",         "1",           "1",           "10"],
@@ -218,7 +220,7 @@ export default function PremiumSayfasi() {
             },
             {
               s: "İhale süresini nasıl uzatırım?",
-              c: "Panel sayfanızdaki ihalenizin yanında 'Süreyi Uzat' butonuna tıklayarak 30 gün ekleyebilirsiniz. Maksimum 90 gün geçerlidir.",
+              c: "Süresi dolmuş bir ihalenin detay sayfasında 'İhale Sonucunu Göster' raporundaki 'İhaleyi Uzat' bölümünden istediğiniz gün sayısını ekleyebilirsiniz. Toplam ihale süresi (zaten geçen süre dahil) Premium planda en fazla 45 gün, Kurumsal planda en fazla 90 gün olabilir.",
             },
             {
               s: "Aboneliği iptal edersem ne olur?",

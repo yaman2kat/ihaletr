@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
-import type { User } from "@supabase/supabase-js";
+import SozlesmeModal from "@/components/SozlesmeModal";
+import { PLAN_MAKS_IHALE_GUNU } from "@/lib/plan-limitleri";
+import type { PlanTuru } from "@/lib/types";
+
+const TASLAK_ANAHTARI = "ihale-olustur-taslak";
 
 const KATEGORILER = ["Kentsel Dönüşüm", "Kat Karşılığı", "Yapı İnşaat", "Bakım & Onarım"];
 
@@ -17,7 +21,7 @@ const ILLER = [
 ];
 
 function maxBitisTarihi(planTuru: string): string {
-  const maxGun = planTuru === "ucretsiz" ? 5 : 90;
+  const maxGun = PLAN_MAKS_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_MAKS_IHALE_GUNU.ucretsiz;
   const d = new Date();
   d.setDate(d.getDate() + maxGun);
   return d.toISOString().split("T")[0];
@@ -25,17 +29,18 @@ function maxBitisTarihi(planTuru: string): string {
 
 export default function IhaleOlustur() {
   const router = useRouter();
-  const [kullanici, setKullanici] = useState<User | null | undefined>(undefined);
   const [planTuru, setPlanTuru] = useState<string>("ucretsiz");
   const [form, setForm] = useState({
     baslik: "", kategori: "", aciklama: "",
-    kurum: "", sehir: "", ilce: "", adaNo: "", parselNo: "",
+    kurum: "", sehir: "", ilce: "", mahalle: "", adaNo: "", parselNo: "", yuzolcumuM2: "",
     baslangicFiyati: "", bitisTarihi: "",
     yapiInsaatRuhsati: "" as "" | "var" | "yok",
     proje: "" as "" | "var" | "yok",
   });
   const [eksikAlanlar, setEksikAlanlar] = useState<string[]>([]);
   const [adaParselBildirim, setAdaParselBildirim] = useState(false);
+  const [kullaniciAdSoyad, setKullaniciAdSoyad] = useState("");
+  const [sozlesmeModalAcik, setSozlesmeModalAcik] = useState(false);
   const [dosyalar, setDosyalar] = useState<{
     sartname: File | null;
     sozlesme: File | null;
@@ -44,25 +49,35 @@ export default function IhaleOlustur() {
   }>({ sartname: null, sozlesme: null, proje: null, tapu: null });
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState("");
+  const taslakYuklendiRef = useRef(false);
 
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setKullanici(session?.user ?? null);
-      if (session?.user) {
-        const { data } = await supabase
-          .from("kullanicilar")
-          .select("plan_turu")
-          .eq("id", session.user.id)
-          .single();
-        if (data?.plan_turu) setPlanTuru(data.plan_turu);
-      }
+      if (!session?.user) return;
+      const { data } = await supabase
+        .from("kullanicilar")
+        .select("plan_turu, ad_soyad")
+        .eq("id", session.user.id)
+        .single();
+      if (data?.plan_turu) setPlanTuru(data.plan_turu);
+      if (data?.ad_soyad) setKullaniciAdSoyad(data.ad_soyad);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setKullanici(session?.user ?? null);
-    });
-    return () => subscription.unsubscribe();
   }, []);
+
+  // Sayfa açılışında yarım kalan taslağı geri yükle (kayıt/giriş sonrası dönüşte de çalışır)
+  useEffect(() => {
+    try {
+      const kayitli = sessionStorage.getItem(TASLAK_ANAHTARI);
+      if (kayitli) setForm(JSON.parse(kayitli));
+    } catch { /* noop */ }
+    taslakYuklendiRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!taslakYuklendiRef.current) return;
+    try { sessionStorage.setItem(TASLAK_ANAHTARI, JSON.stringify(form)); } catch { /* noop */ }
+  }, [form]);
 
   function dogrula(): string[] {
     const eksik: string[] = [];
@@ -76,16 +91,24 @@ export default function IhaleOlustur() {
     if (!form.yapiInsaatRuhsati)      eksik.push("Yapı İnşaat Ruhsatı");
     if (!form.proje)                  eksik.push("Proje");
     if (!dosyalar.sartname)           eksik.push("Yapı Şartnamesi");
-    if (!dosyalar.sozlesme)           eksik.push("Sözleşme Tasarısı");
     if (form.proje === "var" && !dosyalar.proje) eksik.push("Bina Projesi (Proje Var seçildi)");
     return eksik;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!kullanici) return;
     setHata("");
     setEksikAlanlar([]);
+
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    // GEÇİCİ: İhale yayınlamak için giriş/kayıt zorunluluğu kaldırıldı.
+    // Tekrar zorunlu kılmak için aşağıdaki bloğun yorumunu kaldırın:
+    // if (!session?.user) {
+    //   router.push(`/kayit?next=${encodeURIComponent("/ihale-olustur")}`);
+    //   return;
+    // }
+    const kullaniciId = session?.user?.id ?? null;
 
     const eksik = dogrula();
     if (eksik.length > 0) {
@@ -94,8 +117,6 @@ export default function IhaleOlustur() {
     }
 
     setYukleniyor(true);
-
-    const supabase = createClient();
 
     // 1. İhaleyi kaydet
     const { data: ihaleData, error: ihaleError } = await supabase
@@ -107,15 +128,17 @@ export default function IhaleOlustur() {
         kurum:            form.kurum,
         sehir:            form.sehir,
         ilce:             form.ilce   || null,
+        mahalle:          form.mahalle || null,
         ada_no:           form.adaNo  || null,
         parsel_no:        form.parselNo || null,
+        yuzolcumu_m2:     form.yuzolcumuM2 ? Number(form.yuzolcumuM2) : null,
         baslangic_fiyati: Number(form.baslangicFiyati),
         baslangic_tarihi: new Date().toISOString().split("T")[0],
         bitis_tarihi:           form.bitisTarihi,
         durum:                  "beklemede",
         yapi_insaat_ruhsati:    form.yapiInsaatRuhsati || null,
         proje:                  form.proje || null,
-        olusturan_id:           kullanici.id,
+        olusturan_id:           kullaniciId,
       })
       .select("id")
       .single();
@@ -151,7 +174,7 @@ export default function IhaleOlustur() {
         boyut:       dosya.size,
         tur,
         ihale_id:    ihaleData.id,
-        yukleyen_id: kullanici.id,
+        yukleyen_id: kullaniciId,
       });
     };
 
@@ -163,6 +186,7 @@ export default function IhaleOlustur() {
     ]);
 
     setYukleniyor(false);
+    try { sessionStorage.removeItem(TASLAK_ANAHTARI); } catch { /* noop */ }
     router.push("/ihaleler");
     router.refresh();
   }
@@ -171,53 +195,6 @@ export default function IhaleOlustur() {
     setForm((f) => ({ ...f, [alan]: deger }));
   }
 
-  // Session henüz kontrol edilmedi
-  if (kullanici === undefined) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-16">
-        <div className="bg-gray-100 rounded-2xl h-96 animate-pulse" />
-      </div>
-    );
-  }
-
-  // Giriş yapılmamış
-  if (kullanici === null) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-16">
-        <nav className="flex items-center gap-2 text-sm text-gray-500 mb-8">
-          <Link href="/" className="hover:text-blue-700">Ana Sayfa</Link>
-          <span>/</span>
-          <span className="text-gray-900 font-medium">İhale Oluştur</span>
-        </nav>
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">İhale Oluştur</h1>
-          <p className="text-gray-500 mb-8">İhale oluşturmak için giriş yapmanız gerekmektedir.</p>
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-8">
-            <ul className="flex flex-col gap-2">
-              {["Hesabınızla giriş yapın","İhale detaylarını girin","Son teklif tarihini belirleyin","İlanınızı yayınlayın"].map((m) => (
-                <li key={m} className="flex items-center gap-2 text-sm text-blue-700">
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                  </svg>
-                  {m}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Link href="/giris" className="flex-1 text-center bg-blue-700 text-white font-semibold py-3 rounded-xl hover:bg-blue-800 transition-colors">
-              Giriş Yap
-            </Link>
-            <Link href="/kayit" className="flex-1 text-center border-2 border-blue-700 text-blue-700 font-semibold py-3 rounded-xl hover:bg-blue-50 transition-colors">
-              Ücretsiz Kayıt Ol
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Giriş yapılmış — form göster
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-8">
@@ -330,6 +307,22 @@ export default function IhaleOlustur() {
                 <input
                   type="text" placeholder="Örn: Kadıköy"
                   value={form.ilce} onChange={(e) => guncelle("ilce", e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Mahalle</label>
+                <input
+                  type="text" placeholder="Örn: Caferağa"
+                  value={form.mahalle} onChange={(e) => guncelle("mahalle", e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Yüzölçümü (m²)</label>
+                <input
+                  type="number" min="0" placeholder="Örn: 1200"
+                  value={form.yuzolcumuM2} onChange={(e) => guncelle("yuzolcumuM2", e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 />
               </div>
@@ -460,11 +453,13 @@ export default function IhaleOlustur() {
                 value={form.bitisTarihi} onChange={(e) => guncelle("bitisTarihi", e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              {planTuru === "ucretsiz" && (
-                <p className="text-xs text-amber-600 mt-1">
-                  Ücretsiz planda en fazla 5 gün seçilebilir.
-                </p>
-              )}
+              <p className="text-xs text-amber-600 mt-1">
+                {planTuru === "ucretsiz"
+                  ? `Ücretsiz planda en fazla ${PLAN_MAKS_IHALE_GUNU.ucretsiz} gün seçilebilir.`
+                  : `${planTuru === "kurumsal" ? "Kurumsal" : "Premium"} planda en fazla ${
+                      PLAN_MAKS_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_MAKS_IHALE_GUNU.ucretsiz
+                    } gün seçilebilir.`}
+              </p>
             </div>
           </div>
 
@@ -479,13 +474,25 @@ export default function IhaleOlustur() {
                 dosya={dosyalar.sartname}
                 onChange={(f) => setDosyalar((d) => ({ ...d, sartname: f }))}
               />
-              <DosyaAlani
-                label="Sözleşme Tasarısı"
-                kabul=".pdf"
-                zorunlu
-                dosya={dosyalar.sozlesme}
-                onChange={(f) => setDosyalar((d) => ({ ...d, sozlesme: f }))}
-              />
+              <div>
+                <DosyaAlani
+                  label="Sözleşme Tasarısı"
+                  kabul=".pdf"
+                  dosya={dosyalar.sozlesme}
+                  onChange={(f) => setDosyalar((d) => ({ ...d, sozlesme: f }))}
+                />
+                <button
+                  type="button"
+                  onClick={() => setSozlesmeModalAcik(true)}
+                  className="mt-2 w-full flex items-center justify-center gap-2 border border-blue-200 bg-blue-50 text-blue-700 font-medium text-sm py-2.5 rounded-xl hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Sözleşme Hazırla
+                </button>
+              </div>
               {form.proje === "var" && (
                 <DosyaAlani
                   label="Bina Projesi"
@@ -520,6 +527,26 @@ export default function IhaleOlustur() {
           </div>
         </form>
       </div>
+
+      {sozlesmeModalAcik && (
+        <SozlesmeModal
+          tasinmaz={{
+            il: form.sehir,
+            ilce: form.ilce,
+            mahalle: form.mahalle,
+            ada: form.adaNo,
+            parsel: form.parselNo,
+            m2: form.yuzolcumuM2,
+            ihaleTuru: form.kategori,
+          }}
+          arsaSahibiAdSoyadOnerilen={form.kurum || kullaniciAdSoyad}
+          onKapat={() => setSozlesmeModalAcik(false)}
+          onOlustur={(dosya) => {
+            setDosyalar((d) => ({ ...d, sozlesme: dosya }));
+            setSozlesmeModalAcik(false);
+          }}
+        />
+      )}
     </div>
   );
 }

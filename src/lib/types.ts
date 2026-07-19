@@ -97,11 +97,13 @@ export interface Ihale {
   kurum: string;
   sehir: string;
   ilce?: string;
+  mahalle?: string;
   ada_no?: string;
   parsel_no?: string;
   yapi_insaat_ruhsati?: "var" | "yok";
   proje?: "var" | "yok";
   goruntulenme_sayisi?: number;
+  yuzolcumu_m2?: number;
   created_at: string;
 }
 

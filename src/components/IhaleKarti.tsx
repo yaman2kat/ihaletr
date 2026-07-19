@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Ihale } from "@/lib/types";
+import EnDusukTeklif from "@/components/EnDusukTeklif";
 
 const durumRenk: Record<string, string> = {
   aktif: "bg-green-100 text-green-800",
@@ -87,12 +88,7 @@ export default function IhaleKarti({ ihale }: { ihale: Ihale }) {
           <p className="text-gray-400 text-xs mb-0.5">Başlangıç Fiyatı</p>
           <p className="font-semibold text-gray-900">{formatPara(ihale.baslangic_fiyati)}</p>
         </div>
-        <div>
-          <p className="text-gray-400 text-xs mb-0.5">En Düşük Teklif</p>
-          <p className="font-semibold text-blue-700">
-            {ihale.mevcut_teklif ? formatPara(ihale.mevcut_teklif) : "Henüz yok"}
-          </p>
-        </div>
+        <EnDusukTeklif mevcutTeklif={ihale.mevcut_teklif} />
         <div>
           <p className="text-gray-400 text-xs mb-0.5">Bitiş Tarihi</p>
           <p className="text-gray-700">{formatTarih(ihale.bitis_tarihi)}</p>

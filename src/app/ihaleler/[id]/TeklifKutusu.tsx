@@ -71,8 +71,10 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!kullanici || !tutar || kalanHak === null) return;
-    if (kalanHak <= 0) { setHata("Teklif hakkınız kalmadı."); return; }
+    // GEÇİCİ: Teklif vermek için giriş zorunluluğu kaldırıldı.
+    // Tekrar zorunlu kılmak için: if (!kullanici || !tutar || kalanHak === null) return;
+    if (!tutar) return;
+    if (kullanici && kalanHak !== null && kalanHak <= 0) { setHata("Teklif hakkınız kalmadı."); return; }
 
     const tutarNum = Number(tutar);
     if (tutarNum <= 0) { setHata("Geçerli bir tutar girin."); return; }
@@ -83,7 +85,9 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
 
     const { error } = await supabase.from("teklifler").insert({
       ihale_id:     ihaleId,
-      kullanici_id: kullanici.id,
+      // GEÇİCİ: Girişsiz teklif verilebildiği için kullanici_id boş olabilir.
+      // Zorunlu girişe dönüldüğünde: kullanici_id: kullanici.id,
+      kullanici_id: kullanici?.id ?? null,
       tutar:        tutarNum,
     });
 
@@ -99,7 +103,7 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     }
 
     // DB trigger kalan_teklif_hakki'ı otomatik düşürür; local state'i optimistik güncelle
-    if (kalanHak < SINIRSIN_ESIK) {
+    if (kullanici && kalanHak !== null && kalanHak < SINIRSIN_ESIK) {
       setKalanHak((h) => Math.max(0, (h ?? 1) - 1));
     }
 
@@ -121,23 +125,24 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     return <div className="h-12 bg-gray-100 rounded-lg animate-pulse mb-3" />;
   }
 
-  // Giriş yapılmamış
-  if (kullanici === null) {
-    return (
-      <div className="mb-3">
-        <Link
-          href={`/giris?next=/ihaleler/${ihaleId}`}
-          className="block w-full text-center bg-blue-700 text-white font-semibold py-3 rounded-lg hover:bg-blue-800 transition-colors"
-        >
-          Teklif Vermek İçin Giriş Yap
-        </Link>
-        <p className="text-xs text-gray-400 text-center mt-2">
-          Hesabınız yok mu?{" "}
-          <Link href="/kayit" className="text-blue-600 hover:underline">Kayıt olun</Link>
-        </p>
-      </div>
-    );
-  }
+  // GEÇİCİ: Teklif vermek için giriş zorunluluğu kaldırıldı.
+  // Tekrar zorunlu kılmak için aşağıdaki bloğun yorumunu kaldırın:
+  // if (kullanici === null) {
+  //   return (
+  //     <div className="mb-3">
+  //       <Link
+  //         href={`/giris?next=/ihaleler/${ihaleId}`}
+  //         className="block w-full text-center bg-blue-700 text-white font-semibold py-3 rounded-lg hover:bg-blue-800 transition-colors"
+  //       >
+  //         Teklif Vermek İçin Giriş Yap
+  //       </Link>
+  //       <p className="text-xs text-gray-400 text-center mt-2">
+  //         Hesabınız yok mu?{" "}
+  //         <Link href="/kayit" className="text-blue-600 hover:underline">Kayıt olun</Link>
+  //       </p>
+  //     </div>
+  //   );
+  // }
 
   // Teklif hakkı yok → paket satın al
   if (kalanHak !== null && kalanHak <= 0) {

@@ -21,6 +21,8 @@ function GirisForm() {
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata]             = useState("");
 
+  const next = searchParams.get("next") || "/";
+
   useEffect(() => {
     const urlHata = searchParams.get("hata");
     if (urlHata) setHata(decodeURIComponent(urlHata));
@@ -44,7 +46,7 @@ function GirisForm() {
       return;
     }
 
-    router.push("/");
+    router.push(next);
     router.refresh();
   }
 
@@ -119,7 +121,10 @@ function GirisForm() {
 
           <p className="text-center text-sm text-gray-600">
             Hesabınız yok mu?{" "}
-            <Link href="/kayit" className="text-blue-700 font-semibold hover:underline">
+            <Link
+              href={`/kayit${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`}
+              className="text-blue-700 font-semibold hover:underline"
+            >
               Kayıt Olun
             </Link>
           </p>

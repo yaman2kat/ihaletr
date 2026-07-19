@@ -1,10 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getDanismanlarClient } from "@/lib/danismanlar";
 import { mockYorumlar } from "@/lib/mock-data";
 import type { InsaatTuru, InsaatAsamasi, Danishman } from "@/lib/types";
+
+// GEÇİCİ: Danışman sistemi sitede geçici olarak gizlendi.
+// Gerçek sayfa aşağıda "DanismanlarSayfasiOrijinal" adıyla korunuyor;
+// tekrar aktif etmek için bu bileşeni default export yapıp
+// yönlendirmeli olanı kaldırmanız yeterli.
+export default function DanismanlarSayfasi() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/yakinda");
+  }, [router]);
+  return null;
+}
 
 // ─── Yıldız ─────────────────────────────────────────────────────────────────
 
@@ -131,7 +144,7 @@ function Ilerleme({ adim }: { adim: Adim }) {
 
 interface Eslesme { danishman: Danishman; puan: number; }
 
-export default function DanishmanlarSayfasi() {
+export function DanismanlarSayfasiOrijinal() {
   const [adim, setAdim]           = useState<Adim>("giris");
   const [asama, setAsama]         = useState<InsaatAsamasi | "">("");
   const [tur, setTur]             = useState<InsaatTuru | "">("");

@@ -46,12 +46,14 @@ export default function AnaSayfa() {
             >
               İhale Oluştur
             </Link>
+            {/* GEÇİCİ: Danışman sistemi gizlendi. Tekrar aktif etmek için yorumu kaldırın:
             <Link
               href="/danismanlar"
               className="border-2 border-blue-300 text-blue-100 font-semibold px-8 py-3.5 rounded-xl hover:bg-white/10 hover:border-white hover:text-white transition-colors text-lg"
             >
               Danışmanla Konuş
             </Link>
+            */}
           </div>
         </div>
       </section>
@@ -90,7 +92,8 @@ export default function AnaSayfa() {
         </div>
       </section>
 
-      {/* Bağımsız Danışman Banner */}
+      {/* GEÇİCİ: Bağımsız Danışman Banner - Danışman sistemi gizlendiği için
+          bu bölüm devre dışı bırakıldı. Tekrar aktif etmek için yorumu kaldırın:
       <section className="py-16 px-4 bg-gray-50">
         <div className="max-w-5xl mx-auto">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -142,6 +145,7 @@ export default function AnaSayfa() {
           </div>
         </div>
       </section>
+      */}
 
       {/* Öne Çıkan İhaleler */}
       <section className="py-16 px-4 bg-white">

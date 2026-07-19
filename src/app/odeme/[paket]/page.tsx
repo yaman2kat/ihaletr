@@ -16,7 +16,7 @@ const PAKET_BILGI: Record<string, {
   renk: "blue" | "purple" | "gray" | "teal";
   geriHref: string;
 }> = {
-  premium:   { isim: "Premium Üyelik",          fiyat: "500.00",  fiyatGoster: "500₺/ay",      aciklama: "Sınırsız ihale, 90 güne kadar süre uzatma",    renk: "blue",   geriHref: "/premium"       },
+  premium:   { isim: "Premium Üyelik",          fiyat: "500.00",  fiyatGoster: "500₺/ay",      aciklama: "Sınırsız ihale, 45 güne kadar süre uzatma",    renk: "blue",   geriHref: "/premium"       },
   kurumsal:  { isim: "Kurumsal Üyelik",          fiyat: "2499.00", fiyatGoster: "2.499₺/ay",    aciklama: "Premium'ın tüm özellikleri + çoklu kullanıcı", renk: "purple", geriHref: "/premium"       },
   baslangic: { isim: "Başlangıç Teklif Paketi",  fiyat: "299.00",  fiyatGoster: "299₺",         aciklama: "5 teklif hakkı, süresiz geçerli",              renk: "gray",   geriHref: "/teklif-paketi" },
   standart:  { isim: "Standart Teklif Paketi",   fiyat: "699.00",  fiyatGoster: "699₺",         aciklama: "15 teklif hakkı, süresiz geçerli",             renk: "blue",   geriHref: "/teklif-paketi" },

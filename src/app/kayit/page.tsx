@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { KullaniciRol } from "@/lib/types";
 
@@ -18,8 +18,11 @@ function ceviriHata(mesaj: string): string {
   return "Kayıt oluşturulamadı. Lütfen tekrar deneyin.";
 }
 
-export default function KayitSayfasi() {
+function KayitForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/panel";
+  const girisHref = `/giris${next !== "/panel" ? `?next=${encodeURIComponent(next)}` : ""}`;
   const [rol, setRol] = useState<KullaniciRol | null>(null);
   const [form, setForm] = useState({
     adSoyad:     "",
@@ -58,7 +61,7 @@ export default function KayitSayfasi() {
       email:    form.email,
       password: form.sifre,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/panel`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
         data: {
           ad_soyad:  form.adSoyad,
           firma_adi: form.firmaAdi || null,
@@ -77,9 +80,9 @@ export default function KayitSayfasi() {
 
     console.log("signUp başarılı — user:", data.user?.id, "session:", !!data.session, "email_confirmed_at:", data.user?.email_confirmed_at);
 
-    // Email doğrulaması kapalıysa session hemen döner → doğrudan panele yönlendir
+    // Email doğrulaması kapalıysa session hemen döner → doğrudan hedefe yönlendir
     if (data.session) {
-      router.push("/panel");
+      router.push(next);
       router.refresh();
       return;
     }
@@ -138,7 +141,7 @@ export default function KayitSayfasi() {
               </p>
             )}
             <Link
-              href="/giris"
+              href={girisHref}
               className="inline-block bg-blue-700 text-white font-semibold px-8 py-3 rounded-lg hover:bg-blue-800 transition-colors"
             >
               Giriş Yap
@@ -208,7 +211,7 @@ export default function KayitSayfasi() {
 
           <p className="text-center text-sm text-gray-600 mt-8">
             Zaten hesabınız var mı?{" "}
-            <Link href="/giris" className="text-blue-700 font-semibold hover:underline">
+            <Link href={girisHref} className="text-blue-700 font-semibold hover:underline">
               Giriş Yapın
             </Link>
           </p>
@@ -360,12 +363,20 @@ export default function KayitSayfasi() {
 
           <p className="text-center text-sm text-gray-600 mt-6">
             Zaten hesabınız var mı?{" "}
-            <Link href="/giris" className="text-blue-700 font-semibold hover:underline">
+            <Link href={girisHref} className="text-blue-700 font-semibold hover:underline">
               Giriş Yapın
             </Link>
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function KayitSayfasi() {
+  return (
+    <Suspense fallback={<div className="min-h-[calc(100vh-8rem)]" />}>
+      <KayitForm />
+    </Suspense>
   );
 }

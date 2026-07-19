@@ -5,6 +5,8 @@ import GeriSayim from "./GeriSayim";
 import SonTeklifler from "./SonTeklifler";
 import TeklifKutusu from "./TeklifKutusu";
 import AdaParselButon from "@/components/AdaParselButon";
+import EnDusukTeklif from "@/components/EnDusukTeklif";
+import IhaleSonucRaporu from "./IhaleSonucRaporu";
 
 function formatPara(tutar: number): string {
   return new Intl.NumberFormat("tr-TR", {
@@ -46,6 +48,8 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
     (new Date(ihale.bitis_tarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
   const aktifVeDevam = ihale.durum === "aktif" && kalanGun > 0;
+  // Süresi dolmuş ya da tamamlanmış ihaleler için sonuç raporu gösterilir.
+  const sonucGosterilsinMi = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -218,15 +222,7 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
                 Fiyat Bilgisi
               </p>
               <div className="flex flex-col gap-3 mb-5">
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <p className="text-xs text-blue-500 mb-1">Güncel En Düşük Teklif</p>
-                  <p className="text-2xl font-bold text-blue-700">
-                    {ihale.mevcut_teklif ? formatPara(ihale.mevcut_teklif) : "—"}
-                  </p>
-                  {!ihale.mevcut_teklif && (
-                    <p className="text-xs text-blue-400 mt-1">Henüz teklif yok</p>
-                  )}
-                </div>
+                <EnDusukTeklif mevcutTeklif={ihale.mevcut_teklif} boyut="buyuk" />
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-xs text-gray-400 mb-1">Başlangıç Fiyatı</p>
                   <p className="text-xl font-semibold text-gray-700">{formatPara(ihale.baslangic_fiyati)}</p>
@@ -241,6 +237,20 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
                 kalanGun={kalanGun}
               />
             </div>
+
+            {/* İhale Sonucu (süresi dolmuş/tamamlanmış ihaleler) */}
+            {sonucGosterilsinMi && (
+              <IhaleSonucRaporu
+                ihale={{
+                  id: ihale.id,
+                  baslik: ihale.baslik,
+                  kurum: ihale.kurum,
+                  baslangic_tarihi: ihale.baslangic_tarihi,
+                  bitis_tarihi: ihale.bitis_tarihi,
+                }}
+                teklifler={teklifler}
+              />
+            )}
 
             {/* Ada-Parsel (sidebar) */}
             <AdaParselButon

@@ -3,27 +3,34 @@ import { Ihale, Danishman, DanishmanYorum, MuteahhitProfil, ReferansProje, Mutea
 export interface MockTeklif {
   kullanici_adi: string;
   tarih: string;
+  tutar?: number;
+  muteahhit_id?: string;
 }
 
 export const mockIhaleTeklifleri: Record<string, MockTeklif[]> = {
   "1": [
-    { kullanici_adi: "Mehmet Y.",   tarih: "2024-01-20T14:23:00Z" },
-    { kullanici_adi: "Ali K.",      tarih: "2024-01-18T09:45:00Z" },
-    { kullanici_adi: "Fatma D.",    tarih: "2024-01-16T11:30:00Z" },
-    { kullanici_adi: "Serkan A.",   tarih: "2024-01-14T16:00:00Z" },
+    { kullanici_adi: "Konak İnşaat ve Yapı Ltd. Şti.",       tarih: "2024-01-20T14:23:00Z", tutar: 17200000, muteahhit_id: "m1" },
+    { kullanici_adi: "Merkez Yapı A.Ş.",                      tarih: "2024-01-18T09:45:00Z", tutar: 17650000, muteahhit_id: "m2" },
+    { kullanici_adi: "Ege Müteahhitlik ve Onarım A.Ş.",       tarih: "2024-01-16T11:30:00Z", tutar: 17900000, muteahhit_id: "m3" },
+    { kullanici_adi: "Serkan A. İnşaat",                      tarih: "2024-01-14T16:00:00Z", tutar: 18300000 },
   ],
   "2": [
-    { kullanici_adi: "İbrahim Ş.", tarih: "2024-01-22T08:10:00Z" },
-    { kullanici_adi: "Zeynep T.",  tarih: "2024-01-20T13:00:00Z" },
+    { kullanici_adi: "Merkez Yapı A.Ş.",                      tarih: "2024-01-22T08:10:00Z", tutar: 9100000,  muteahhit_id: "m2" },
+    { kullanici_adi: "Konak İnşaat ve Yapı Ltd. Şti.",        tarih: "2024-01-20T13:00:00Z", tutar: 9450000,  muteahhit_id: "m1" },
   ],
   "3": [
-    { kullanici_adi: "Hasan M.",  tarih: "2024-01-21T10:00:00Z" },
-    { kullanici_adi: "Ayşe O.",   tarih: "2024-01-19T15:30:00Z" },
-    { kullanici_adi: "Burak K.",  tarih: "2024-01-18T12:00:00Z" },
+    { kullanici_adi: "Ege Müteahhitlik ve Onarım A.Ş.",       tarih: "2024-01-21T10:00:00Z", tutar: 31500000, muteahhit_id: "m3" },
+    { kullanici_adi: "Konak İnşaat ve Yapı Ltd. Şti.",        tarih: "2024-01-19T15:30:00Z", tutar: 32800000, muteahhit_id: "m1" },
+    { kullanici_adi: "Burak K. Yapı",                         tarih: "2024-01-18T12:00:00Z", tutar: 33600000 },
+  ],
+  "4": [
+    { kullanici_adi: "Ege Müteahhitlik ve Onarım A.Ş.",       tarih: "2024-01-28T09:00:00Z", tutar: 3850000,  muteahhit_id: "m3" },
+    { kullanici_adi: "Merkez Yapı A.Ş.",                      tarih: "2024-01-25T14:15:00Z", tutar: 3990000,  muteahhit_id: "m2" },
+    { kullanici_adi: "Konak İnşaat ve Yapı Ltd. Şti.",        tarih: "2024-01-22T10:30:00Z", tutar: 4050000,  muteahhit_id: "m1" },
   ],
   "6": [
-    { kullanici_adi: "Caner D.",  tarih: "2024-01-25T09:00:00Z" },
-    { kullanici_adi: "Elif Y.",   tarih: "2024-01-23T14:45:00Z" },
+    { kullanici_adi: "Konak İnşaat ve Yapı Ltd. Şti.",        tarih: "2024-01-25T09:00:00Z", tutar: 20500000, muteahhit_id: "m1" },
+    { kullanici_adi: "Merkez Yapı A.Ş.",                      tarih: "2024-01-23T14:45:00Z", tutar: 21300000, muteahhit_id: "m2" },
   ],
 };
 
@@ -68,6 +75,7 @@ export const mockIhaleler: Ihale[] = [
     yapi_insaat_ruhsati: "yok",
     proje: "yok",
     goruntulenme_sayisi: 178,
+    yuzolcumu_m2: 1200,
     created_at: "2024-01-15T09:00:00Z",
   },
   {
@@ -89,6 +97,7 @@ export const mockIhaleler: Ihale[] = [
     yapi_insaat_ruhsati: "var",
     proje: "var",
     goruntulenme_sayisi: 491,
+    yuzolcumu_m2: 4800,
     created_at: "2024-01-05T10:00:00Z",
   },
   {
@@ -143,6 +152,7 @@ export const mockIhaleler: Ihale[] = [
     yapi_insaat_ruhsati: "var",
     proje: "var",
     goruntulenme_sayisi: 203,
+    yuzolcumu_m2: 2200,
     created_at: "2024-01-20T08:00:00Z",
   },
 ];
