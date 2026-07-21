@@ -42,7 +42,7 @@ export const mockIhaleler: Ihale[] = [
       "İstanbul Fatih ilçesinde riskli yapı statüsündeki 48 konutun yıkılarak yeniden yapılması. Zemin etüdü ve statik proje müteahhide dahildir.",
     kategori: "Kentsel Dönüşüm",
     baslangic_tarihi: "2024-01-10",
-    bitis_tarihi: "2024-03-10",
+    bitis_tarihi: "2026-07-19", // GEÇİCİ: test amaçlı dünkü tarihe ayarlandı, "İhale Sonucunu Göster" butonunu görmek için
     baslangic_fiyati: 18500000,
     mevcut_teklif: 17200000,
     durum: "aktif",

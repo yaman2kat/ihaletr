@@ -1,18 +1,10 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { mockDanishmanlar, mockYorumlar } from "@/lib/mock-data";
 import YorumBolumu from "./YorumBolumu";
 
 export async function generateStaticParams() {
   return mockDanishmanlar.map((d) => ({ id: d.id }));
-}
-
-// GEÇİCİ: Danışman sistemi sitede geçici olarak gizlendi.
-// Gerçek sayfa aşağıda "DanishmanProfilOrijinal" adıyla korunuyor;
-// tekrar aktif etmek için bu bileşeni default export yapıp
-// yönlendirmeli olanı kaldırmanız yeterli.
-export default async function DanishmanProfil() {
-  redirect("/yakinda");
 }
 
 // Yıldız svg - sunucu tarafında render edilebilir
@@ -37,7 +29,7 @@ function YildizSatiri({ puan, adet }: { puan: number; adet: number }) {
   );
 }
 
-export async function DanishmanProfilOrijinal({ params }: { params: Promise<{ id: string }> }) {
+export default async function DanishmanProfil({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const d = mockDanishmanlar.find((x) => x.id === id);
   if (!d) notFound();

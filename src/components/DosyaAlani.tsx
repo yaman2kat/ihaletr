@@ -66,7 +66,7 @@ export default function DosyaAlani({ label, kabul, zorunlu = false, dosya, onCha
         {label}{" "}
         {zorunlu
           ? <span className="text-red-500">*</span>
-          : <span className="text-gray-400 font-normal">(isteğe bağlı)</span>
+          : <span className="text-gray-400 font-normal">(İsteğe Bağlı)</span>
         }
       </label>
 

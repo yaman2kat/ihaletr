@@ -77,8 +77,7 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-8">
             <Link href="/ihaleler"      className="text-gray-600 hover:text-blue-700 font-medium transition-colors">İhaleler</Link>
             <Link href="/ihale-olustur" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">İhale Oluştur</Link>
-            {/* GEÇİCİ: Danışman sistemi gizlendi. Tekrar aktif etmek için yorumu kaldırın: */}
-            {/* <Link href="/danismanlar" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Danışmanlar</Link> */}
+            <Link href="/danismanlar"   className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Danışmanlar</Link>
           </div>
 
           {/* Masaüstü Auth */}
@@ -160,8 +159,7 @@ export default function Navbar() {
           <div className="md:hidden pb-4 border-t border-gray-100 mt-2 pt-4 flex flex-col gap-3">
             <Link href="/ihaleler"      className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>İhaleler</Link>
             <Link href="/ihale-olustur" className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>İhale Oluştur</Link>
-            {/* GEÇİCİ: Danışman sistemi gizlendi. Tekrar aktif etmek için yorumu kaldırın: */}
-            {/* <Link href="/danismanlar" className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Danışmanlar</Link> */}
+            <Link href="/danismanlar"   className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Danışmanlar</Link>
             <Link href="/premium"       className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Premium</Link>
 
             <div className="border-t border-gray-100 pt-3 mt-1 flex flex-col gap-2">

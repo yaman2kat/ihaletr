@@ -120,6 +120,15 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     );
   }
 
+  // Durum "aktif" olsa da son teklif tarihi geçmişse teklif kabul edilmez
+  if (kalanGun <= 0) {
+    return (
+      <button disabled className="block w-full text-center bg-gray-200 text-gray-500 font-semibold py-3 rounded-lg cursor-not-allowed mb-3">
+        Teklif süresi doldu
+      </button>
+    );
+  }
+
   // Yükleniyor
   if (kullanici === undefined || !hakYuklendi) {
     return <div className="h-12 bg-gray-100 rounded-lg animate-pulse mb-3" />;

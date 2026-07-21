@@ -1,23 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getDanismanlarClient } from "@/lib/danismanlar";
 import { mockYorumlar } from "@/lib/mock-data";
 import type { InsaatTuru, InsaatAsamasi, Danishman } from "@/lib/types";
-
-// GEÇİCİ: Danışman sistemi sitede geçici olarak gizlendi.
-// Gerçek sayfa aşağıda "DanismanlarSayfasiOrijinal" adıyla korunuyor;
-// tekrar aktif etmek için bu bileşeni default export yapıp
-// yönlendirmeli olanı kaldırmanız yeterli.
-export default function DanismanlarSayfasi() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace("/yakinda");
-  }, [router]);
-  return null;
-}
 
 // ─── Yıldız ─────────────────────────────────────────────────────────────────
 
@@ -144,7 +131,7 @@ function Ilerleme({ adim }: { adim: Adim }) {
 
 interface Eslesme { danishman: Danishman; puan: number; }
 
-export function DanismanlarSayfasiOrijinal() {
+export default function DanismanlarSayfasi() {
   const [adim, setAdim]           = useState<Adim>("giris");
   const [asama, setAsama]         = useState<InsaatAsamasi | "">("");
   const [tur, setTur]             = useState<InsaatTuru | "">("");
@@ -233,10 +220,10 @@ export function DanismanlarSayfasiOrijinal() {
             <div>
               <div className="text-center mb-8">
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Size nasıl yardımcı olabiliriz?</h2>
-                <p className="text-gray-500 text-sm">İhtiyacınıza en uygun seçeneği belirleyin</p>
+                <p className="text-gray-500 text-sm">Aşağıdaki seçenekten devam edin</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Seçenek 1 — İletişim */}
+              <div className="max-w-md mx-auto">
+                {/* Bilgi / İletişim */}
                 <Link
                   href="/iletisim"
                   className="group flex flex-col gap-4 bg-white border-2 border-gray-200 hover:border-blue-400 rounded-2xl p-7 shadow-sm hover:shadow-md transition-all text-left"
@@ -262,39 +249,15 @@ export function DanismanlarSayfasiOrijinal() {
                     </svg>
                   </span>
                 </Link>
-
-                {/* Seçenek 2 — Danışman Bul */}
-                <button
-                  type="button"
-                  onClick={() => { setAdim("asama"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                  className="group flex flex-col gap-4 bg-white border-2 border-gray-200 hover:border-blue-400 rounded-2xl p-7 shadow-sm hover:shadow-md transition-all text-left"
-                >
-                  <div className="w-14 h-14 rounded-2xl bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-colors flex-shrink-0">
-                    <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-gray-900 text-base mb-1.5 group-hover:text-blue-700 transition-colors">
-                      İnşaatıma danışman atanmasını istiyorum
-                    </h3>
-                    <p className="text-gray-500 text-sm leading-relaxed">
-                      İnşaat aşamanıza, türüne ve konumunuza göre en uygun bağımsız danışmanı sistem otomatik olarak önerir.
-                    </p>
-                  </div>
-                  <span className="text-blue-600 text-sm font-semibold flex items-center gap-1 mt-auto">
-                    Danışman Bul
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </span>
-                </button>
               </div>
             </div>
           )}
 
-          {/* ─── WIZARD ─── */}
+          {/* ─── WIZARD ───
+              GEÇİCİ: Otomatik danışman atama/eşleştirme özelliği şimdilik
+              devre dışı — giriş ekranındaki tetikleyici buton kaldırıldığı
+              için bu adımlara artık ulaşılamıyor. Kod ileride tekrar
+              etkinleştirmek için burada bırakıldı. */}
           {adim !== "giris" && adim !== "sonuc" && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
               <Ilerleme adim={adim} />
