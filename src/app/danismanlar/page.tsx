@@ -184,7 +184,7 @@ export default function DanismanlarSayfasi() {
             Bağımsız Denetim
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold mb-4 leading-tight">
-            Bağımsız İnşaat Danışmanı Bulun
+            Bağımsız İnşaat Danışmanlığı
           </h1>
           <p className="text-blue-100 text-base leading-relaxed max-w-2xl mx-auto">
             Yükleniciden, arsa sahibinden ve belediyeden tamamen bağımsız uzman danışmanlar — inşaatınızı başından sonuna denetler, haklarınızı korur.
@@ -219,8 +219,8 @@ export default function DanismanlarSayfasi() {
           {adim === "giris" && (
             <div>
               <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Size nasıl yardımcı olabiliriz?</h2>
-                <p className="text-gray-500 text-sm">Aşağıdaki seçenekten devam edin</p>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Sistem Hakkında Bilgi Alın</h2>
+                <p className="text-gray-500 text-sm">Bağımsız denetim hizmetimizin kapsamı, işleyişi ve fiyatlandırması hakkında sorularınızı yanıtlayalım</p>
               </div>
               <div className="max-w-md mx-auto">
                 {/* Bilgi / İletişim */}
@@ -236,10 +236,10 @@ export default function DanismanlarSayfasi() {
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900 text-base mb-1.5 group-hover:text-blue-700 transition-colors">
-                      Sistem hakkında bilgi almak istiyorum
+                      İletişim Bilgilerimize Ulaşın
                     </h3>
                     <p className="text-gray-500 text-sm leading-relaxed">
-                      Platform nasıl çalışır, fiyatlandırma, teknik destek veya genel sorularınız için iletişim bilgilerimize ulaşın.
+                      Platform nasıl çalışır, danışmanlık süreci, fiyatlandırma, teknik destek veya genel sorularınız için iletişim bilgilerimize ulaşın.
                     </p>
                   </div>
                   <span className="text-blue-600 text-sm font-semibold flex items-center gap-1 mt-auto">
