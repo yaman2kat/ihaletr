@@ -222,7 +222,13 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
                 Fiyat Bilgisi
               </p>
               <div className="flex flex-col gap-3 mb-5">
-                <EnDusukTeklif mevcutTeklif={ihale.mevcut_teklif} boyut="buyuk" />
+                <EnDusukTeklif
+                  mevcutTeklif={ihale.mevcut_teklif}
+                  olusturanId={ihale.olusturan_id}
+                  teklifler={teklifler}
+                  bittiMi={sonucGosterilsinMi}
+                  boyut="buyuk"
+                />
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-xs text-gray-400 mb-1">Başlangıç Fiyatı</p>
                   <p className="text-xl font-semibold text-gray-700">{formatPara(ihale.baslangic_fiyati)}</p>
@@ -249,6 +255,7 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
                   bitis_tarihi: ihale.bitis_tarihi,
                 }}
                 teklifler={teklifler}
+                olusturanId={ihale.olusturan_id}
               />
             )}
 

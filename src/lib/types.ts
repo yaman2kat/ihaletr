@@ -104,6 +104,7 @@ export interface Ihale {
   proje?: "var" | "yok";
   goruntulenme_sayisi?: number;
   yuzolcumu_m2?: number;
+  olusturan_id?: string | null;
   created_at: string;
 }
 

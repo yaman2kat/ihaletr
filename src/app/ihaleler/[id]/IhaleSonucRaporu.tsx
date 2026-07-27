@@ -2,9 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { createClient } from "@/lib/supabase/client";
 import { mockMuteahhitYorumlar, type MockTeklif } from "@/lib/mock-data";
 import type { PlanTuru } from "@/lib/types";
+import { useTeklifRaporuErisimi } from "@/hooks/useTeklifRaporuErisimi";
 import {
   type IhaleSonucVerisi,
   type SonucFirma,
@@ -28,6 +40,7 @@ interface Props {
     bitis_tarihi: string;
   };
   teklifler: MockTeklif[];
+  olusturanId?: string | null;
 }
 
 function dosyaIndir(blob: Blob, dosyaAdi: string) {
@@ -166,7 +179,7 @@ function UzatmaBolumu({
   return (
     <div className="border border-gray-200 rounded-xl p-4">
       <p className="text-sm text-gray-600 mb-3">
-        Planınız (<strong>{planTuru === "kurumsal" ? "Kurumsal" : "Premium"}</strong>) toplamda en fazla{" "}
+        Planınız (<strong>{planTuru === "kurumsal" ? "Kurumsal" : planTuru === "premium" ? "Premium" : "Ücretsiz"}</strong>) toplamda en fazla{" "}
         {planLimiti} gün ihale süresine izin verir. Bu ihale şu ana kadar {gecenGun} gün sürdü;
         en fazla <strong>{kalanUzatmaHakki} gün</strong> daha uzatabilirsiniz.
       </p>
@@ -196,8 +209,89 @@ function UzatmaBolumu({
   );
 }
 
-export default function IhaleSonucRaporu({ ihale, teklifler }: Props) {
+const GRAFIK_RENK_NOTR = "#2a78d6";
+const GRAFIK_RENK_DUSUK = "#0ca30c";
+const GRAFIK_RENK_YUKSEK = "#d03b3b";
+
+function TeklifGrafigi({ firmalar }: { firmalar: SonucFirma[] }) {
+  if (firmalar.length < 2) return null;
+
+  const veri = [...firmalar].sort((a, b) => a.tutar - b.tutar);
+  const enDusukTutar = veri[0].tutar;
+  const enYuksekTutar = veri[veri.length - 1].tutar;
+  const cokesitliTutar = enDusukTutar !== enYuksekTutar;
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-gray-900 mb-3">Teklif Tutarları Karşılaştırması</h3>
+      <div style={{ height: Math.max(140, veri.length * 44) }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={veri}
+            layout="vertical"
+            margin={{ top: 4, right: 64, bottom: 4, left: 4 }}
+          >
+            <CartesianGrid horizontal={false} stroke="#e1e0d9" />
+            <XAxis type="number" hide domain={[0, (max: number) => max * 1.15]} />
+            <YAxis
+              type="category"
+              dataKey="firmaAdi"
+              width={130}
+              tickLine={false}
+              axisLine={{ stroke: "#c3c2b7" }}
+              tick={{ fontSize: 12, fill: "#52514e" }}
+              tickFormatter={(v: string) => (v.length > 16 ? v.slice(0, 15) + "…" : v)}
+            />
+            <Tooltip
+              cursor={{ fill: "rgba(11,11,11,0.04)" }}
+              formatter={(value) => [formatPara(Number(value)), "Teklif"]}
+              contentStyle={{ borderRadius: 8, border: "1px solid #e1e0d9", fontSize: 12 }}
+            />
+            <Bar dataKey="tutar" radius={[0, 4, 4, 0]} barSize={20} isAnimationActive={false}>
+              {veri.map((f, i) => (
+                <Cell
+                  key={i}
+                  fill={
+                    !cokesitliTutar
+                      ? GRAFIK_RENK_NOTR
+                      : f.tutar === enDusukTutar
+                        ? GRAFIK_RENK_DUSUK
+                        : f.tutar === enYuksekTutar
+                          ? GRAFIK_RENK_YUKSEK
+                          : GRAFIK_RENK_NOTR
+                  }
+                />
+              ))}
+              <LabelList
+                dataKey="tutar"
+                position="right"
+                formatter={(v) => formatPara(Number(v))}
+                style={{ fontSize: 11, fill: "#0b0b0b" }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      {cokesitliTutar && (
+        <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GRAFIK_RENK_DUSUK }} />
+            En düşük teklif
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GRAFIK_RENK_YUKSEK }} />
+            En yüksek teklif
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Props) {
   const [acikMi, setAcikMi] = useState(false);
+  // Bu bileşen yalnızca ihale bittikten sonra render edildiğinden bittiMi hep true.
+  const erisim = useTeklifRaporuErisimi({ olusturanId, teklifler, bittiMi: true });
 
   if (teklifler.length === 0) return null;
 
@@ -229,6 +323,30 @@ export default function IhaleSonucRaporu({ ihale, teklifler }: Props) {
   const ozet = ozetIstatistikHesapla(firmalar);
   const siraliFirmalar = [...firmalar].sort((a, b) => a.tutar - b.tutar);
   const uzatmaGosterilsinMi = firmalar.length < 7;
+
+  if (erisim === "yukleniyor") {
+    return <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />;
+  }
+
+  if (erisim === "kilitli") {
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 text-center">
+        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
+          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 10-8 0v4h8z" />
+          </svg>
+        </div>
+        <p className="text-sm font-semibold text-gray-700 mb-1">İhale Sonuç Raporu Kilitli</p>
+        <p className="text-xs text-gray-500 mb-3">
+          Bu raporu yalnızca ihale sahibi, ihaleye teklif vermiş katılımcılar ve Kurumsal plan kullanıcıları görüntüleyebilir.
+        </p>
+        <Link href="/premium" className="text-xs font-semibold text-blue-700 hover:underline">
+          Kurumsal plana geçin →
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -309,6 +427,9 @@ export default function IhaleSonucRaporu({ ihale, teklifler }: Props) {
                   </tbody>
                 </table>
               </div>
+
+              {/* Teklif tutarları grafiği */}
+              <TeklifGrafigi firmalar={firmalar} />
 
               {/* Özet istatistikler */}
               {ozet && (

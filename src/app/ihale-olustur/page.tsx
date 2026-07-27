@@ -38,6 +38,7 @@ export default function IhaleOlustur() {
     proje: "" as "" | "var" | "yok",
   });
   const [eksikAlanlar, setEksikAlanlar] = useState<string[]>([]);
+  const [otomatikSonlandirmaOnay, setOtomatikSonlandirmaOnay] = useState(false);
   const [adaParselBildirim, setAdaParselBildirim] = useState(false);
   const [kullaniciAdSoyad, setKullaniciAdSoyad] = useState("");
   const [sozlesmeModalAcik, setSozlesmeModalAcik] = useState(false);
@@ -92,6 +93,7 @@ export default function IhaleOlustur() {
     if (!form.proje)                  eksik.push("Proje");
     if (!dosyalar.sartname)           eksik.push("Yapı Şartnamesi");
     if (form.proje === "var" && !dosyalar.proje) eksik.push("Bina Projesi (Proje Var seçildi)");
+    if (planTuru === "ucretsiz" && !otomatikSonlandirmaOnay) eksik.push("Otomatik sonlandırma onayı");
     return eksik;
   }
 
@@ -460,6 +462,9 @@ export default function IhaleOlustur() {
                       PLAN_MAKS_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_MAKS_IHALE_GUNU.ucretsiz
                     } gün seçilebilir.`}
               </p>
+              <p className="text-xs text-gray-400 mt-1">
+                İdeal ihale süresi, başlangıç tarihinden itibaren 20-30 gün arasıdır.
+              </p>
             </div>
           </div>
 
@@ -510,6 +515,21 @@ export default function IhaleOlustur() {
               />
             </div>
           </div>
+
+          {planTuru === "ucretsiz" && (
+            <label className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={otomatikSonlandirmaOnay}
+                onChange={(e) => setOtomatikSonlandirmaOnay(e.target.checked)}
+                className="mt-0.5 w-4 h-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500 flex-shrink-0"
+              />
+              <span className="text-sm text-amber-800">
+                İhale süresi dolduğunda <strong>2 gün içinde uzatma yapılmazsa</strong> ihale otomatik
+                olarak sonlandırılacaktır. Bunu onaylıyor musunuz?
+              </span>
+            </label>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <button

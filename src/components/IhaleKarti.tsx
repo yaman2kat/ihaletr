@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Ihale } from "@/lib/types";
+import { mockIhaleTeklifleri } from "@/lib/mock-data";
 import EnDusukTeklif from "@/components/EnDusukTeklif";
 
 const durumRenk: Record<string, string> = {
@@ -36,6 +37,8 @@ export default function IhaleKarti({ ihale }: { ihale: Ihale }) {
   const kalanGun = Math.ceil(
     (new Date(ihale.bitis_tarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
+  const bittiMi = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
+  const teklifler = mockIhaleTeklifleri[ihale.id] ?? [];
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col gap-4">
@@ -88,7 +91,12 @@ export default function IhaleKarti({ ihale }: { ihale: Ihale }) {
           <p className="text-gray-400 text-xs mb-0.5">Başlangıç Fiyatı</p>
           <p className="font-semibold text-gray-900">{formatPara(ihale.baslangic_fiyati)}</p>
         </div>
-        <EnDusukTeklif mevcutTeklif={ihale.mevcut_teklif} />
+        <EnDusukTeklif
+          mevcutTeklif={ihale.mevcut_teklif}
+          olusturanId={ihale.olusturan_id}
+          teklifler={teklifler}
+          bittiMi={bittiMi}
+        />
         <div>
           <p className="text-gray-400 text-xs mb-0.5">Bitiş Tarihi</p>
           <p className="text-gray-700">{formatTarih(ihale.bitis_tarihi)}</p>

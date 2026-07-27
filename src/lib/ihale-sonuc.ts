@@ -46,9 +46,11 @@ export function formatTarih(tarih: string): string {
   });
 }
 
-// Ücretsiz planın uzatma hakkı yok; Premium/Kurumsal sınırları
-// PLAN_MAKS_IHALE_GUNU'ndan (tek kaynak, ihale-olustur ile paylaşılır) gelir.
+// Toplam ihale süresi uzatma sınırı (gün). Premium/Kurumsal sınırları
+// PLAN_MAKS_IHALE_GUNU'ndan (tek kaynak, ihale-olustur ile paylaşılır) gelir;
+// Ücretsiz planın toplam uzatma sınırı ayrıca 30 gün olarak belirlenmiştir.
 export const PLAN_UZATMA_LIMITI: Partial<Record<PlanTuru, number>> = {
+  ucretsiz: 30,
   premium: PLAN_MAKS_IHALE_GUNU.premium,
   kurumsal: PLAN_MAKS_IHALE_GUNU.kurumsal,
 };

@@ -5,6 +5,7 @@ export interface MockTeklif {
   tarih: string;
   tutar?: number;
   muteahhit_id?: string;
+  kullanici_id?: string;
 }
 
 export const mockIhaleTeklifleri: Record<string, MockTeklif[]> = {
