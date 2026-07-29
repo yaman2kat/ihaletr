@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
-import SozlesmeModal from "@/components/SozlesmeModal";
 import { PLAN_MAKS_IHALE_GUNU } from "@/lib/plan-limitleri";
 import type { PlanTuru } from "@/lib/types";
 
@@ -40,8 +39,6 @@ export default function IhaleOlustur() {
   const [eksikAlanlar, setEksikAlanlar] = useState<string[]>([]);
   const [otomatikSonlandirmaOnay, setOtomatikSonlandirmaOnay] = useState(false);
   const [adaParselBildirim, setAdaParselBildirim] = useState(false);
-  const [kullaniciAdSoyad, setKullaniciAdSoyad] = useState("");
-  const [sozlesmeModalAcik, setSozlesmeModalAcik] = useState(false);
   const [dosyalar, setDosyalar] = useState<{
     sartname: File | null;
     sozlesme: File | null;
@@ -58,11 +55,10 @@ export default function IhaleOlustur() {
       if (!session?.user) return;
       const { data } = await supabase
         .from("kullanicilar")
-        .select("plan_turu, ad_soyad")
+        .select("plan_turu")
         .eq("id", session.user.id)
         .single();
       if (data?.plan_turu) setPlanTuru(data.plan_turu);
-      if (data?.ad_soyad) setKullaniciAdSoyad(data.ad_soyad);
     });
   }, []);
 
@@ -494,25 +490,12 @@ export default function IhaleOlustur() {
                 dosya={dosyalar.sartname}
                 onChange={(f) => setDosyalar((d) => ({ ...d, sartname: f }))}
               />
-              <div>
-                <DosyaAlani
-                  label="Sözleşme Tasarısı"
-                  kabul=".pdf"
-                  dosya={dosyalar.sozlesme}
-                  onChange={(f) => setDosyalar((d) => ({ ...d, sozlesme: f }))}
-                />
-                <button
-                  type="button"
-                  onClick={() => setSozlesmeModalAcik(true)}
-                  className="mt-2 w-full flex items-center justify-center gap-2 border border-blue-200 bg-blue-50 text-blue-700 font-medium text-sm py-2.5 rounded-xl hover:bg-blue-100 hover:border-blue-300 transition-colors"
-                >
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Sözleşme Hazırla
-                </button>
-              </div>
+              <DosyaAlani
+                label="Sözleşme Tasarısı"
+                kabul=".pdf"
+                dosya={dosyalar.sozlesme}
+                onChange={(f) => setDosyalar((d) => ({ ...d, sozlesme: f }))}
+              />
               {form.proje === "var" && (
                 <DosyaAlani
                   label="Bina Projesi"
@@ -562,26 +545,6 @@ export default function IhaleOlustur() {
           </div>
         </form>
       </div>
-
-      {sozlesmeModalAcik && (
-        <SozlesmeModal
-          tasinmaz={{
-            il: form.sehir,
-            ilce: form.ilce,
-            mahalle: form.mahalle,
-            ada: form.adaNo,
-            parsel: form.parselNo,
-            m2: form.yuzolcumuM2,
-            ihaleTuru: form.kategori,
-          }}
-          arsaSahibiAdSoyadOnerilen={form.kurum || kullaniciAdSoyad}
-          onKapat={() => setSozlesmeModalAcik(false)}
-          onOlustur={(dosya) => {
-            setDosyalar((d) => ({ ...d, sozlesme: dosya }));
-            setSozlesmeModalAcik(false);
-          }}
-        />
-      )}
     </div>
   );
 }

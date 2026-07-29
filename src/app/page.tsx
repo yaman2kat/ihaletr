@@ -46,12 +46,6 @@ export default function AnaSayfa() {
             >
               İhale Oluştur
             </Link>
-            <Link
-              href="/danismanlar"
-              className="border-2 border-blue-300 text-blue-100 font-semibold px-8 py-3.5 rounded-xl hover:bg-white/10 hover:border-white hover:text-white transition-colors text-lg"
-            >
-              Danışmanla Konuş
-            </Link>
           </div>
         </div>
       </section>
