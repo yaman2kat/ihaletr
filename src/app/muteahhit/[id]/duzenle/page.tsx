@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { mockMuteahhitler, mockReferansProjeler } from "@/lib/mock-data";
 import type { MuteahhitProfil, ReferansProje, InsaatTuru } from "@/lib/types";
+import { YETKI_BELGESI_GRUPLARI, YETKI_BELGESI_ACIKLAMA } from "@/lib/muteahhit-yetki-belgesi";
 
 const UZMANLIK_SECENEKLERI: InsaatTuru[] = [
   "Kentsel Dönüşüm",
@@ -151,6 +152,7 @@ export default function MuteahhitDuzenle() {
           uzmanlik_alanlari: form.uzmanlik_alanlari,
           lisans_no: form.lisans_no,
           sicil_no: form.sicil_no,
+          yetki_belgesi_grubu: form.yetki_belgesi_grubu,
           telefon: form.telefon,
           email: form.email,
           aciklama: form.aciklama,
@@ -301,6 +303,34 @@ export default function MuteahhitDuzenle() {
                   className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+            </div>
+
+            <div>
+              <label
+                className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5"
+                title="Bakanlık, gruplara göre üstlenilebilecek iş deneyimi ve azami iş bedelini sınırlandırır."
+              >
+                Müteahhitlik Yetki Belgesi Grubu
+                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </label>
+              <select
+                value={form.yetki_belgesi_grubu ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, yetki_belgesi_grubu: (e.target.value || undefined) as MuteahhitProfil["yetki_belgesi_grubu"] }))}
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Grup seçin...</option>
+                {YETKI_BELGESI_GRUPLARI.map((g) => (
+                  <option key={g} value={g} title={YETKI_BELGESI_ACIKLAMA[g]}>
+                    {g === "Geçici/Y Belgesi" ? g : `${g} Grubu`}
+                  </option>
+                ))}
+              </select>
+              {form.yetki_belgesi_grubu && YETKI_BELGESI_ACIKLAMA[form.yetki_belgesi_grubu] && (
+                <p className="text-xs text-gray-400 mt-1.5">{YETKI_BELGESI_ACIKLAMA[form.yetki_belgesi_grubu]}</p>
+              )}
             </div>
 
             <div>

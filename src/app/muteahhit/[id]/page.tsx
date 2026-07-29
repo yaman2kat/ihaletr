@@ -3,6 +3,7 @@ import Link from "next/link";
 import { mockMuteahhitler, mockReferansProjeler, mockMuteahhitYorumlar } from "@/lib/mock-data";
 import YorumBolumu from "./YorumBolumu";
 import type { InsaatTuru } from "@/lib/types";
+import { YETKI_BELGESI_ACIKLAMA } from "@/lib/muteahhit-yetki-belgesi";
 
 export async function generateStaticParams() {
   return mockMuteahhitler.map((m) => ({ id: m.id }));
@@ -117,6 +118,23 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
                   <div>
                     <p className="text-xs text-gray-400">Yeterlik Belgesi No</p>
                     <p className="font-medium text-gray-900">{profil.lisans_no}</p>
+                  </div>
+                </div>
+              )}
+              {profil.yetki_belgesi_grubu && (
+                <div className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-xs text-gray-400">Yetki Belgesi Grubu</p>
+                    <p
+                      className="font-medium text-gray-900 cursor-help underline decoration-dotted decoration-gray-300 underline-offset-2"
+                      title={YETKI_BELGESI_ACIKLAMA[profil.yetki_belgesi_grubu] || undefined}
+                    >
+                      {profil.yetki_belgesi_grubu}
+                    </p>
                   </div>
                 </div>
               )}

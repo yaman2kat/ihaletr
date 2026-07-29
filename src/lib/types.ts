@@ -3,6 +3,7 @@ export type KullaniciRol = "arsa_sahibi" | "muteahhit";
 export type PlanTuru = "ucretsiz" | "premium" | "kurumsal";
 
 export type InsaatTuru = "Kentsel Dönüşüm" | "Kat Karşılığı" | "Yapı İnşaat" | "Bakım & Onarım";
+export type YetkiBelgesiGrubu = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "Geçici/Y Belgesi";
 export type InsaatAsamasi =
   | "Proje/Ruhsat"
   | "Temel"
@@ -50,6 +51,7 @@ export interface MuteahhitProfil {
   uzmanlik_alanlari: InsaatTuru[];
   lisans_no?: string;
   sicil_no?: string;
+  yetki_belgesi_grubu?: YetkiBelgesiGrubu;
   telefon?: string;
   email?: string;
   aciklama?: string;

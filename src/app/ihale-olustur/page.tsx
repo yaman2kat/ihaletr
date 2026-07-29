@@ -87,6 +87,11 @@ export default function IhaleOlustur() {
     if (!form.aciklama.trim())        eksik.push("Açıklama");
     if (!form.kurum.trim())           eksik.push("Kurum / Firma");
     if (!form.sehir)                  eksik.push("Şehir");
+    if (!form.ilce.trim())            eksik.push("İlçe");
+    if (!form.mahalle.trim())         eksik.push("Mahalle");
+    if (!form.adaNo.trim())           eksik.push("Ada No");
+    if (!form.parselNo.trim())        eksik.push("Parsel No");
+    if (!form.yuzolcumuM2)            eksik.push("Yüzölçümü (m²)");
     if (!form.baslangicFiyati)        eksik.push("Başlangıç Fiyatı");
     if (!form.bitisTarihi)            eksik.push("Son Teklif Tarihi");
     if (!form.yapiInsaatRuhsati)      eksik.push("Yapı İnşaat Ruhsatı");
@@ -129,11 +134,11 @@ export default function IhaleOlustur() {
         aciklama:         form.aciklama,
         kurum:            form.kurum,
         sehir:            form.sehir,
-        ilce:             form.ilce   || null,
-        mahalle:          form.mahalle || null,
-        ada_no:           form.adaNo  || null,
-        parsel_no:        form.parselNo || null,
-        yuzolcumu_m2:     form.yuzolcumuM2 ? Number(form.yuzolcumuM2) : null,
+        ilce:             form.ilce,
+        mahalle:          form.mahalle,
+        ada_no:           form.adaNo,
+        parsel_no:        form.parselNo,
+        yuzolcumu_m2:     Number(form.yuzolcumuM2),
         baslangic_fiyati: Number(form.baslangicFiyati),
         baslangic_tarihi: new Date().toISOString().split("T")[0],
         bitis_tarihi:           form.bitisTarihi,
@@ -305,41 +310,51 @@ export default function IhaleOlustur() {
             <p className="text-sm font-semibold text-gray-700 mb-3">Tapu / Parsel Bilgileri</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">İlçe</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  İlçe <span className="text-red-500">*</span>
+                </label>
                 <input
-                  type="text" placeholder="Örn: Kadıköy"
+                  type="text" required placeholder="Örn: Kadıköy"
                   value={form.ilce} onChange={(e) => guncelle("ilce", e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Mahalle</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Mahalle <span className="text-red-500">*</span>
+                </label>
                 <input
-                  type="text" placeholder="Örn: Caferağa"
+                  type="text" required placeholder="Örn: Caferağa"
                   value={form.mahalle} onChange={(e) => guncelle("mahalle", e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Yüzölçümü (m²)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Yüzölçümü (m²) <span className="text-red-500">*</span>
+                </label>
                 <input
-                  type="number" min="0" placeholder="Örn: 1200"
+                  type="number" required min="0" placeholder="Örn: 1200"
                   value={form.yuzolcumuM2} onChange={(e) => guncelle("yuzolcumuM2", e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Ada No</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Ada No <span className="text-red-500">*</span>
+                </label>
                 <input
-                  type="text" placeholder="Örn: 2841"
+                  type="text" required placeholder="Örn: 2841"
                   value={form.adaNo} onChange={(e) => guncelle("adaNo", e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Parsel No</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Parsel No <span className="text-red-500">*</span>
+                </label>
                 <input
-                  type="text" placeholder="Örn: 14"
+                  type="text" required placeholder="Örn: 14"
                   value={form.parselNo} onChange={(e) => guncelle("parselNo", e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 />

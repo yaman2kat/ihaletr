@@ -422,6 +422,7 @@ CREATE TABLE public.muteahhit_profiller (
   uzmanlik_alanlari        text[]      NOT NULL DEFAULT '{}',
   lisans_no                text,
   sicil_no                 text,
+  yetki_belgesi_grubu      text CHECK (yetki_belgesi_grubu IN ('A','B','C','D','E','F','G','H','Geçici/Y Belgesi')),
   telefon                  text,
   email                    text,
   aciklama                 text,

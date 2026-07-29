@@ -4,7 +4,8 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { KullaniciRol } from "@/lib/types";
+import type { KullaniciRol, YetkiBelgesiGrubu } from "@/lib/types";
+import { YETKI_BELGESI_GRUPLARI } from "@/lib/muteahhit-yetki-belgesi";
 
 function ceviriHata(mesaj: string): string {
   if (mesaj.includes("User already registered") || mesaj.includes("already been registered"))
@@ -30,6 +31,7 @@ function KayitForm() {
     firmaAdi:    "",
     telefon:     "",
     lisansNo:    "",
+    yetkiBelgesiGrubu: "" as "" | YetkiBelgesiGrubu,
     sifre:       "",
     sifreTekrar: "",
   });
@@ -51,6 +53,10 @@ function KayitForm() {
     }
     if (rol === "muteahhit" && !form.firmaAdi.trim()) {
       setHata("Müteahhit kaydı için firma adı zorunludur.");
+      return;
+    }
+    if (rol === "muteahhit" && !form.yetkiBelgesiGrubu) {
+      setHata("Müteahhit kaydı için Müteahhitlik Yetki Belgesi Grubu zorunludur.");
       return;
     }
 
@@ -94,6 +100,7 @@ function KayitForm() {
           kullanici_id:            data.user.id,
           firma_adi:               form.firmaAdi,
           lisans_no:               form.lisansNo || null,
+          yetki_belgesi_grubu:     form.yetkiBelgesiGrubu || null,
           telefon:                 form.telefon  || null,
           email:                   form.email,
           uzmanlik_alanlari:       [],
@@ -299,6 +306,24 @@ function KayitForm() {
                   onChange={(e) => setForm((f) => ({ ...f, lisansNo: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
+              </div>
+            )}
+
+            {isMuteahhit && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5" htmlFor="yetkiBelgesiGrubu">
+                  Müteahhitlik Yetki Belgesi Grubu <span className="text-red-500">*</span>
+                </label>
+                <select id="yetkiBelgesiGrubu" required
+                  value={form.yetkiBelgesiGrubu}
+                  onChange={(e) => setForm((f) => ({ ...f, yetkiBelgesiGrubu: e.target.value as YetkiBelgesiGrubu }))}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="">Grup seçin...</option>
+                  {YETKI_BELGESI_GRUPLARI.map((g) => (
+                    <option key={g} value={g}>{g === "Geçici/Y Belgesi" ? g : `${g} Grubu`}</option>
+                  ))}
+                </select>
               </div>
             )}
 
