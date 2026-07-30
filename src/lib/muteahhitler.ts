@@ -2,6 +2,20 @@ import { createClient } from "@/lib/supabase/client";
 import { mockMuteahhitler, mockReferansProjeler, mockMuteahhitYorumlar } from "@/lib/mock-data";
 import type { MuteahhitProfil, ReferansProje, MuteahhitYorum } from "@/lib/types";
 
+export async function getMuteahhitlerClient(): Promise<MuteahhitProfil[]> {
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("muteahhit_profiller")
+      .select("*")
+      .order("firma_adi", { ascending: true });
+    if (error || !data || data.length === 0) return mockMuteahhitler;
+    return data as MuteahhitProfil[];
+  } catch {
+    return mockMuteahhitler;
+  }
+}
+
 export async function getMuteahhitProfil(id: string): Promise<MuteahhitProfil | null> {
   try {
     const supabase = createClient();

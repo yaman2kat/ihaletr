@@ -4,6 +4,7 @@ import { mockIhaleler, mockIhaleTeklifleri } from "@/lib/mock-data";
 import GeriSayim from "./GeriSayim";
 import SonTeklifler from "./SonTeklifler";
 import TeklifKutusu from "./TeklifKutusu";
+import IhaleBelgeleri from "./IhaleBelgeleri";
 import AdaParselButon from "@/components/AdaParselButon";
 import EnDusukTeklif from "@/components/EnDusukTeklif";
 import IhaleSonucRaporu from "./IhaleSonucRaporu";
@@ -201,6 +202,9 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
               parselNo={ihale.parsel_no}
             />
           </div>
+
+          {/* Belgeler */}
+          <IhaleBelgeleri ihaleId={ihale.id} />
 
           {/* Son Teklifler */}
           <SonTeklifler teklifler={teklifler} />

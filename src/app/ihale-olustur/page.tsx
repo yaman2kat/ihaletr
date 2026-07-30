@@ -93,6 +93,7 @@ export default function IhaleOlustur() {
     if (!form.yapiInsaatRuhsati)      eksik.push("Yapı İnşaat Ruhsatı");
     if (!form.proje)                  eksik.push("Proje");
     if (!dosyalar.sartname)           eksik.push("Yapı Şartnamesi");
+    if (!dosyalar.tapu)               eksik.push("Tapu Fotokopisi");
     if (form.proje === "var" && !dosyalar.proje) eksik.push("Bina Projesi (Proje Var seçildi)");
     if (planTuru === "ucretsiz" && !otomatikSonlandirmaOnay) eksik.push("Otomatik sonlandırma onayı");
     return eksik;
@@ -181,11 +182,34 @@ export default function IhaleOlustur() {
       });
     };
 
+    // Tapu Fotokopisi: herkese kapalı ayrı bir bucket'a yüklenir, ortak
+    // dosyaYukle akışının aksine genel-erişim URL'i üretilmez/saklanmaz —
+    // yalnızca admin RLS politikasıyla storage'dan okuyabilir.
+    const tapuYukle = async (dosya: File | null) => {
+      if (!dosya) return;
+      const yol = `${ihaleData.id}/tapu-${Date.now()}-${dosya.name}`;
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from("ihale-tapu-belgeleri")
+        .upload(yol, dosya, { upsert: false });
+
+      if (storageError || !storageData) return;
+
+      await supabase.from("belgeler").insert({
+        baslik:      "Tapu Fotokopisi",
+        dosya_url:   yol, // özel bucket içindeki yol — herkese açık URL değil
+        dosya_tipi:  dosya.type,
+        boyut:       dosya.size,
+        tur:         "tapu",
+        ihale_id:    ihaleData.id,
+        yukleyen_id: kullaniciId,
+      });
+    };
+
     await Promise.allSettled([
       dosyaYukle(dosyalar.sartname, "proje",   "Yapı Şartnamesi"),
       dosyaYukle(dosyalar.sozlesme, "sozlesme", "Sözleşme Tasarısı"),
       dosyaYukle(dosyalar.proje,    "proje",    "Bina Projesi"),
-      dosyaYukle(dosyalar.tapu,     "ruhsat",   "Tapu Fotokopisi"),
+      tapuYukle(dosyalar.tapu),
     ]);
 
     setYukleniyor(false);
@@ -505,12 +529,19 @@ export default function IhaleOlustur() {
                   onChange={(f) => setDosyalar((d) => ({ ...d, proje: f }))}
                 />
               )}
-              <DosyaAlani
-                label="Tapu Fotokopisi"
-                kabul=".pdf,.jpg,.jpeg"
-                dosya={dosyalar.tapu}
-                onChange={(f) => setDosyalar((d) => ({ ...d, tapu: f }))}
-              />
+              <div>
+                <DosyaAlani
+                  label="Tapu Fotokopisi"
+                  kabul=".pdf,.jpg,.jpeg"
+                  zorunlu
+                  dosya={dosyalar.tapu}
+                  onChange={(f) => setDosyalar((d) => ({ ...d, tapu: f }))}
+                />
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Yalnızca ihalenin gerçekliğini doğrulamak için istenir. Kimseyle paylaşılmaz;
+                  yalnızca yetkili yöneticiler erişebilir.
+                </p>
+              </div>
             </div>
           </div>
 

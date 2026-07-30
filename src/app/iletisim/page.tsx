@@ -100,16 +100,16 @@ export default function IletisimSayfasi() {
         <div className="flex flex-col divide-y divide-gray-100">
           {[
             {
-              s: "Danışman atama süreci nasıl işliyor?",
-              c: "\"Danışmanla Konuş\" sayfasında inşaat aşamanızı, türünüzü ve konumunuzu seçtikten sonra sistem en uygun danışmanı otomatik olarak önerir. Doğrudan iletişime geçebilirsiniz.",
-            },
-            {
-              s: "Danışmanla görüşmek ücretli mi?",
-              c: "İlk iletişim ve bilgi alma ücretsizdir. Denetim hizmeti için danışmanla ayrıca ücret belirlenir.",
-            },
-            {
               s: "Platforma nasıl ihale ekleyebilirim?",
               c: "Hesabınıza giriş yaptıktan sonra \"İhale Oluştur\" butonundan yeni ihale oluşturabilirsiniz.",
+            },
+            {
+              s: "Teknik destek almak istiyorum, nereden ulaşabilirim?",
+              c: "Bu sayfadaki telefon veya e-posta kanallarından, ya da Destek sayfamızdan bize ulaşabilirsiniz.",
+            },
+            {
+              s: "Platformun işleyişiyle ilgili daha fazla soru nerede?",
+              c: "Üyelik planları, teklif ücretlendirmesi ve ihale süreçleriyle ilgili tüm sorular için Sık Sorulan Sorular sayfamıza göz atın.",
             },
           ].map((faq) => (
             <div key={faq.s} className="py-4 first:pt-0 last:pb-0">
@@ -124,7 +124,12 @@ export default function IletisimSayfasi() {
       <div className="flex items-center justify-center gap-4">
         <Link href="/danismanlar"
           className="flex items-center gap-2 text-blue-700 font-semibold hover:underline text-sm">
-          ← Danışman Bul
+          ← Destek Merkezi
+        </Link>
+        <span className="text-gray-300">|</span>
+        <Link href="/sss"
+          className="text-gray-500 hover:text-blue-700 font-medium text-sm transition-colors">
+          Sık Sorulan Sorular
         </Link>
         <span className="text-gray-300">|</span>
         <Link href="/"

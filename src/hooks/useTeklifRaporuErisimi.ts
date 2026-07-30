@@ -16,8 +16,7 @@ interface Params {
 
 /**
  * En düşük/yüksek teklif bilgisi ve ihale sonuç raporu için erişim kuralı:
- * - İhale sahibi her zaman görebilir.
- * - İhale devam ederken sahibi dışında kimse göremez (plan farketmeksizin).
+ * - İhale devam ederken hiç kimse göremez — sahibi dahil (plan farketmeksizin).
  * - İhale bittikten sonra: sahibi, o ihaleye teklif vermiş katılımcılar ve
  *   Kurumsal plan kullanıcıları görebilir; diğerleri kilitli görür.
  */
@@ -32,13 +31,13 @@ export function useTeklifRaporuErisimi({ olusturanId, teklifler, bittiMi }: Para
       if (iptalEdildi) return;
       const kullaniciId = session?.user?.id;
 
-      if (kullaniciId && olusturanId && kullaniciId === olusturanId) {
-        setDurum("izinli");
+      if (!bittiMi) {
+        setDurum("kilitli");
         return;
       }
 
-      if (!bittiMi) {
-        setDurum("kilitli");
+      if (kullaniciId && olusturanId && kullaniciId === olusturanId) {
+        setDurum("izinli");
         return;
       }
 

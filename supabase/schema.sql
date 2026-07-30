@@ -36,7 +36,7 @@ DROP TYPE IF EXISTS gorusme_durumu  CASCADE;
 CREATE TYPE kullanici_rol   AS ENUM ('bireysel', 'firma', 'admin');
 CREATE TYPE ihale_durumu    AS ENUM ('aktif', 'beklemede', 'tamamlandi', 'iptal');
 CREATE TYPE teklif_durumu   AS ENUM ('beklemede', 'kabul_edildi', 'reddedildi');
-CREATE TYPE belge_turu      AS ENUM ('ruhsat', 'proje', 'sozlesme', 'denetim_raporu', 'fotograf', 'diger');
+CREATE TYPE belge_turu      AS ENUM ('ruhsat', 'proje', 'sozlesme', 'denetim_raporu', 'fotograf', 'diger', 'tapu');
 CREATE TYPE gorusme_durumu  AS ENUM ('beklemede', 'onaylandi', 'reddedildi', 'tamamlandi');
 
 -- ------------------------------------------------------------
@@ -273,8 +273,14 @@ CREATE INDEX idx_belgeler_yukleyen  ON public.belgeler(yukleyen_id);
 
 ALTER TABLE public.belgeler ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Belgeler herkese acik"
-  ON public.belgeler FOR SELECT USING (true);
+-- Tapu Fotokopisi yalnızca ihalenin gerçekliğini doğrulamak için istenir;
+-- ihale sahibi, teklif veren müteahhitler ya da başka hiçbir kullanıcı
+-- göremez/indiremez. Sadece admin rolündeki kullanıcılar erişebilir.
+CREATE POLICY "Tapu haricindeki belgeler herkese acik"
+  ON public.belgeler FOR SELECT USING (
+    tur <> 'tapu'
+    OR EXISTS (SELECT 1 FROM public.kullanicilar WHERE id = auth.uid() AND rol = 'admin')
+  );
 
 -- GEÇİCİ: Misafir kullanıcıların da belge yükleyebilmesi için genişletildi. Eski hali:
 -- CREATE POLICY "Giris yapan belge yukleyebilir"
@@ -570,3 +576,29 @@ LANGUAGE sql STABLE SECURITY DEFINER AS $$
   WHERE d.aktif = true
   ORDER BY toplam_puan DESC;
 $$;
+
+-- ------------------------------------------------------------
+-- 9. TAPU BELGELERİ — ÖZEL (PRIVATE) STORAGE BUCKET
+-- Not: "ihale-belgeleri" bucket'ı (şartname/proje/sözleşme dosyaları için)
+-- herkese açık (public) olarak Supabase panelinden manuel oluşturulur ve
+-- bu dosya kapsamının dışındadır. Tapu Fotokopisi ise gerçeklik doğrulama
+-- amaçlı olduğundan ayrı, herkese kapalı bir bucket'ta tutulur ve yalnızca
+-- admin rolündeki kullanıcılar storage.objects RLS politikasıyla okuyabilir.
+-- ------------------------------------------------------------
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('ihale-tapu-belgeleri', 'ihale-tapu-belgeleri', false)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Sadece admin tapu belgesini gorebilir"
+  ON storage.objects FOR SELECT USING (
+    bucket_id = 'ihale-tapu-belgeleri'
+    AND EXISTS (SELECT 1 FROM public.kullanicilar WHERE id = auth.uid() AND rol = 'admin')
+  );
+
+-- İhale oluşturma formu tapu belgesini herkes (giriş yapan ya da misafir)
+-- yükleyebilir — public.belgeler tablosundaki yükleme politikasıyla tutarlı.
+CREATE POLICY "Herkes tapu belgesi yukleyebilir"
+  ON storage.objects FOR INSERT WITH CHECK (
+    bucket_id = 'ihale-tapu-belgeleri'
+  );
