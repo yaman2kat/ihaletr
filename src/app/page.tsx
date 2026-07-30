@@ -84,59 +84,6 @@ export default function AnaSayfa() {
         </div>
       </section>
 
-      {/* Bağımsız Danışman Banner */}
-      <section className="py-16 px-4 bg-gray-50">
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-              <div className="p-8 md:p-10 flex flex-col justify-center">
-                <span className="inline-block text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full mb-4 w-fit">
-                  YENİ ÖZELLİK
-                </span>
-                <h2 className="text-2xl font-bold text-gray-900 mb-3 leading-snug">
-                  Bağımsız İnşaat Danışmanı ile Güvenle İnşa Edin
-                </h2>
-                <p className="text-gray-600 mb-6 leading-relaxed">
-                  Uzman ve tarafsız danışmanlar, inşaatınızı başından sonuna denetler.
-                  Proje aşamasından teslimat kontrolüne kadar her adımda yanınızda.
-                </p>
-                <div className="flex flex-col gap-2 mb-8">
-                  {["Proje ve ruhsat denetimi", "Temel, kaba ve ince iş kontrolleri", "Tarafsız teslimat raporu"].map((m) => (
-                    <div key={m} className="flex items-center gap-2 text-sm text-gray-700">
-                      <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                      {m}
-                    </div>
-                  ))}
-                </div>
-                <Link
-                  href="/danismanlar"
-                  className="bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl hover:bg-blue-800 transition-colors w-fit"
-                >
-                  Danışman Bul →
-                </Link>
-              </div>
-              <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-8 md:p-10 flex flex-col justify-center text-white">
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { sayi: "120+", etiket: "Aktif Danışman" },
-                    { sayi: "3.500+", etiket: "Denetlenen Proje" },
-                    { sayi: "81", etiket: "İl Kapsamı" },
-                    { sayi: "%98", etiket: "Müşteri Memnuniyeti" },
-                  ].map((s) => (
-                    <div key={s.etiket} className="bg-white/10 rounded-xl p-4 text-center">
-                      <p className="text-2xl font-bold">{s.sayi}</p>
-                      <p className="text-blue-200 text-xs mt-1">{s.etiket}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Öne Çıkan İhaleler */}
       <section className="py-16 px-4 bg-white">
         <div className="max-w-7xl mx-auto">
