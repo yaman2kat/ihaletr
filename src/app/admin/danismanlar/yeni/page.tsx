@@ -104,10 +104,10 @@ export default function YeniDanishman() {
     <div className="max-w-3xl mx-auto px-6 py-10">
       <div className="flex items-center gap-3 mb-8">
         <Link href="/admin/danismanlar" className="text-gray-400 hover:text-gray-700 text-sm transition-colors">
-          ← Danışmanlar
+          ← Destek Uzmanları
         </Link>
         <span className="text-gray-300">/</span>
-        <h1 className="text-xl font-bold text-gray-900">Yeni Danışman Ekle</h1>
+        <h1 className="text-xl font-bold text-gray-900">Yeni Destek Uzmanı Ekle</h1>
       </div>
 
       {hata && (
@@ -160,7 +160,7 @@ export default function YeniDanishman() {
             <div className="sm:col-span-2">
               <Field label="Kısa Biyografi" required>
                 <textarea required rows={4}
-                  placeholder="Danışmanin deneyimi, uzmanlık alanları ve denetim yaklaşımını kısaca açıklayın..."
+                  placeholder="Destek uzmanının deneyimi, uzmanlık alanları ve denetim yaklaşımını kısaca açıklayın..."
                   value={form.biyografi} onChange={(e) => guncelle("biyografi", e.target.value)}
                   className={inputCls + " resize-none"} />
               </Field>
@@ -194,7 +194,7 @@ export default function YeniDanishman() {
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-400 mb-4">Danışmanin aktif olarak denetim yaptığı illeri seçin</p>
+          <p className="text-xs text-gray-400 mb-4">Destek uzmanının aktif olarak denetim yaptığı illeri seçin</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {ILLER.map((il) => (
               <label key={il} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
@@ -213,7 +213,7 @@ export default function YeniDanishman() {
         <div className="flex gap-3">
           <button type="submit" disabled={yukleniyor}
             className="flex-1 bg-blue-700 text-white font-semibold py-3 rounded-xl hover:bg-blue-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
-            {yukleniyor ? "Kaydediliyor..." : "Danışmani Kaydet"}
+            {yukleniyor ? "Kaydediliyor..." : "Destek Uzmanını Kaydet"}
           </button>
           <Link href="/admin/danismanlar"
             className="px-6 py-3 border border-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors text-center text-sm">

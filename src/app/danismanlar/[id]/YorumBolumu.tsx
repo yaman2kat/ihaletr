@@ -191,7 +191,7 @@ export default function YorumBolumu({ danishmanId }: Props) {
               rows={4}
               value={metin}
               onChange={(e) => setMetin(e.target.value)}
-              placeholder="Danışmanla çalışma deneyiminizi paylaşın..."
+              placeholder="Destek uzmanıyla çalışma deneyiminizi paylaşın..."
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>

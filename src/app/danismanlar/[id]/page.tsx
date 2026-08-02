@@ -46,7 +46,7 @@ export default async function DanishmanProfil({ params }: { params: Promise<{ id
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-8">
         <Link href="/" className="hover:text-blue-700">Ana Sayfa</Link>
         <span>/</span>
-        <Link href="/danismanlar" className="hover:text-blue-700">Danışmanlar</Link>
+        <Link href="/danismanlar" className="hover:text-blue-700">Destek Uzmanları</Link>
         <span>/</span>
         <span className="text-gray-900 font-medium">{d.ad_soyad}</span>
       </nav>
@@ -62,7 +62,7 @@ export default async function DanishmanProfil({ params }: { params: Promise<{ id
                 {d.ad_soyad.split(" ").map((n) => n[0]).join("").slice(0, 2)}
               </div>
               <h1 className="text-xl font-bold text-gray-900">{d.ad_soyad}</h1>
-              <p className="text-gray-500 text-sm mt-1">Bağımsız İnşaat Danışmanı</p>
+              <p className="text-gray-500 text-sm mt-1">Bağımsız İnşaat Destek Uzmanı</p>
 
               {/* Ortalama puan */}
               {danishmanYorumlari.length > 0 && (
@@ -244,7 +244,7 @@ export default async function DanishmanProfil({ params }: { params: Promise<{ id
 
           {/* Denetim Kapsamı */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Danışmanlık Kapsamı</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Destek Kapsamı</h2>
             <div className="flex flex-col gap-3">
               {[
                 { asama: "Proje / Ruhsat",        aciklama: "Mimari proje kontrolü, ruhsat başvurusu ve onay süreci takibi" },
@@ -268,7 +268,7 @@ export default async function DanishmanProfil({ params }: { params: Promise<{ id
           <YorumBolumu danishmanId={id} />
 
           <Link href="/danismanlar" className="flex items-center gap-2 text-gray-500 hover:text-blue-700 font-medium transition-colors text-sm">
-            ← Tüm Danışmanlara Dön
+            ← Tüm Destek Uzmanlarına Dön
           </Link>
         </div>
       </div>

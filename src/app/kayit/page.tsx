@@ -211,7 +211,7 @@ function KayitForm() {
               <div>
                 <p className="text-lg font-bold text-gray-900 mb-1">Arsa Sahibi</p>
                 <p className="text-sm text-gray-500 leading-relaxed">
-                  İhale açın, müteahhit tekliflerini karşılaştırın, danışman atayın.
+                  İhale açın, müteahhit tekliflerini karşılaştırın, destek uzmanı atayın.
                 </p>
               </div>
               <span className="text-sm text-blue-700 font-semibold group-hover:underline">

@@ -30,7 +30,7 @@ export default function AdminDanismanlar() {
   useEffect(() => { yukle(); }, []);
 
   async function handleSil(id: string) {
-    if (!confirm("Bu danışmanı silmek istediğinizden emin misiniz?")) return;
+    if (!confirm("Bu destek uzmanını silmek istediğinizden emin misiniz?")) return;
     setSiliniyor(id);
     const supabase = createClient();
     const { error } = await supabase.from("danismanlar").delete().eq("id", id);
@@ -46,8 +46,8 @@ export default function AdminDanismanlar() {
     <div className="max-w-6xl mx-auto px-6 py-10">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Danışmanlar</h1>
-          <p className="text-gray-500 text-sm mt-1">{liste.length} danışman kayıtlı</p>
+          <h1 className="text-2xl font-bold text-gray-900">Destek Uzmanları</h1>
+          <p className="text-gray-500 text-sm mt-1">{liste.length} destek uzmanı kayıtlı</p>
         </div>
         <Link
           href="/admin/danismanlar/yeni"
@@ -56,7 +56,7 @@ export default function AdminDanismanlar() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Yeni Danışman Ekle
+          Yeni Destek Uzmanı Ekle
         </Link>
       </div>
 
@@ -74,9 +74,9 @@ export default function AdminDanismanlar() {
         </div>
       ) : liste.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
-          <p className="text-lg font-medium mb-2">Henüz danışman yok</p>
+          <p className="text-lg font-medium mb-2">Henüz destek uzmanı yok</p>
           <Link href="/admin/danismanlar/yeni" className="text-blue-600 hover:underline text-sm">
-            İlk danışmanı ekleyin →
+            İlk destek uzmanını ekleyin →
           </Link>
         </div>
       ) : (
