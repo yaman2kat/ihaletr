@@ -1,13 +1,86 @@
 -- ============================================================
 -- İhaleTR — "Hesap türlerini ayır" özelliği için CANLI DB migration'ı.
 -- Bu dosyayı Supabase Dashboard > SQL Editor'e yapıştırıp çalıştırın.
--- ÖNKOŞUL: supabase/davet_migration.sql daha önce uygulanmış olmalı
--- (kullanicilar.davet_kodu, davetler tablosu vb. zaten var olmalı).
+-- ARTIK BAĞIMSIZ ÇALIŞIR: "Arkadaşını Davet Et" (davet_migration.sql)
+-- daha önce uygulanmadıysa (ör. "type odul_turu does not exist" hatası)
+-- 0. adım gereken tüm nesneleri burada da oluşturur. davet_migration.sql
+-- zaten uygulanmışsa mevcut nesnelere dokunmadan atlar.
 -- supabase/schema.sql'in TAMAMINI ÇALIŞTIRMAYIN — mevcut verinizi siler.
 -- ============================================================
 
+-- 0) Önkoşul: davet sistemi nesneleri (davet_migration.sql) yoksa oluştur
+-- ------------------------------------------------------------
+
+-- 0a) davet_kodu / davet_eden_id sütunları
+ALTER TABLE public.kullanicilar
+  ADD COLUMN IF NOT EXISTS davet_kodu    text UNIQUE,
+  ADD COLUMN IF NOT EXISTS davet_eden_id uuid REFERENCES public.kullanicilar(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_kullanicilar_davet_eden ON public.kullanicilar(davet_eden_id);
+
+-- 0b) odul_turu enum'u (yalnızca yoksa oluştur)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'odul_turu') THEN
+    CREATE TYPE odul_turu AS ENUM ('teklif_hakki', 'sure_uzatma');
+  END IF;
+END $$;
+
+-- 0c) Benzersiz, 8 karakterlik davet kodu üreten fonksiyon
+CREATE OR REPLACE FUNCTION public.gen_davet_kodu()
+RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+  v_kod text;
+BEGIN
+  LOOP
+    v_kod := upper(substr(md5(random()::text || clock_timestamp()::text), 1, 8));
+    EXIT WHEN NOT EXISTS (SELECT 1 FROM public.kullanicilar WHERE davet_kodu = v_kod);
+  END LOOP;
+  RETURN v_kod;
+END;
+$$;
+
+-- Mevcut kullanıcılara (varsa) davet kodu ata; sıfırdan kurulumda no-op'tur.
+UPDATE public.kullanicilar SET davet_kodu = public.gen_davet_kodu() WHERE davet_kodu IS NULL;
+
+-- 0d) davetler tablosu (yalnızca yoksa oluştur)
+CREATE TABLE IF NOT EXISTS public.davetler (
+  id                   uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  davet_eden_id        uuid        NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  davet_edilen_id      uuid        NOT NULL UNIQUE REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  odul_verildi         boolean     NOT NULL DEFAULT false,
+  odul_turu            odul_turu,
+  uygulanan_ihale_id   uuid        REFERENCES public.ihaleler(id) ON DELETE SET NULL,
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  odul_verildi_tarihi  timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS idx_davetler_eden  ON public.davetler(davet_eden_id);
+CREATE INDEX IF NOT EXISTS idx_davetler_durum ON public.davetler(odul_verildi);
+
+ALTER TABLE public.davetler ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'davetler'
+      AND policyname = 'Davet eden kendi davetlerini gorebilir'
+  ) THEN
+    CREATE POLICY "Davet eden kendi davetlerini gorebilir"
+      ON public.davetler FOR SELECT USING (auth.uid() = davet_eden_id);
+  END IF;
+END $$;
+
+-- ============================================================
 -- 1) Yeni hesap_turu enum'u ve kullanicilar sütunu
-CREATE TYPE hesap_turu_tipi AS ENUM ('arsa_sahibi', 'muteahhit', 'her_ikisi');
+-- ============================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'hesap_turu_tipi') THEN
+    CREATE TYPE hesap_turu_tipi AS ENUM ('arsa_sahibi', 'muteahhit', 'her_ikisi');
+  END IF;
+END $$;
 
 ALTER TABLE public.kullanicilar
   ADD COLUMN IF NOT EXISTS hesap_turu hesap_turu_tipi NOT NULL DEFAULT 'arsa_sahibi';
@@ -112,6 +185,19 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+-- Tetikleyici davet_migration.sql tarafından zaten oluşturulmuş olabilir;
+-- fonksiyon CREATE OR REPLACE ile güncellendiği için mevcut tetikleyici
+-- otomatik olarak yeni gövdeyi kullanır. Hiç yoksa (davet_migration.sql
+-- hiç çalıştırılmadıysa) burada oluşturulur.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'on_auth_user_email_confirmed') THEN
+    CREATE TRIGGER on_auth_user_email_confirmed
+      AFTER UPDATE ON auth.users
+      FOR EACH ROW EXECUTE FUNCTION public.handle_davet_odul_kaydi();
+  END IF;
+END $$;
 
 -- 5) davet_odulu_uygula(): önceden belirlenmiş odul_turu varsa istemci değerini yok sayar
 CREATE OR REPLACE FUNCTION public.davet_odulu_uygula(
