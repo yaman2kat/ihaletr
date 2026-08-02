@@ -121,6 +121,8 @@ export interface Kullanici {
   premium_bitis_tarihi?: string | null;
   kalan_teklif_hakki?: number;
   toplam_teklif_sayisi?: number;
+  davet_kodu?: string | null;
+  davet_eden_id?: string | null;
   created_at: string;
 }
 
@@ -130,4 +132,18 @@ export interface Teklif {
   kullanici_id: string;
   tutar: number;
   created_at: string;
+}
+
+export type OdulTuru = "teklif_hakki" | "sure_uzatma";
+
+export interface Davet {
+  id: string;
+  davet_eden_id: string;
+  davet_edilen_id: string;
+  odul_verildi: boolean;
+  odul_turu: OdulTuru | null;
+  uygulanan_ihale_id: string | null;
+  created_at: string;
+  odul_verildi_tarihi: string | null;
+  davet_edilen?: { ad_soyad: string };
 }
