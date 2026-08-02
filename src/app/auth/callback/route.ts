@@ -20,6 +20,16 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     console.log("[auth/callback] exchangeCodeForSession →", error ? `HATA: ${error.message}` : "OK");
     if (!error) {
+      // Google/Apple ile kayıt (signInWithOAuth) signUp() gibi custom
+      // metadata taşıyamaz; hesap_turu ve davet kodu buradan tamamlanır.
+      const hesapTuru = searchParams.get("hesap_turu");
+      const refKodu   = searchParams.get("ref");
+      if (hesapTuru || refKodu) {
+        await supabase.rpc("oauth_kayit_tamamla", {
+          p_hesap_turu: hesapTuru,
+          p_ref_kodu: refKodu,
+        });
+      }
       return NextResponse.redirect(`${origin}${next}`);
     }
     return NextResponse.redirect(

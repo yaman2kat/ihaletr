@@ -31,6 +31,7 @@ DROP TYPE IF EXISTS teklif_durumu   CASCADE;
 DROP TYPE IF EXISTS belge_turu      CASCADE;
 DROP TYPE IF EXISTS gorusme_durumu  CASCADE;
 DROP TYPE IF EXISTS odul_turu       CASCADE;
+DROP TYPE IF EXISTS hesap_turu_tipi CASCADE;
 
 -- ------------------------------------------------------------
 -- 0. ENUM TİPLERİ
@@ -41,6 +42,9 @@ CREATE TYPE ihale_durumu    AS ENUM ('aktif', 'beklemede', 'tamamlandi', 'iptal'
 CREATE TYPE teklif_durumu   AS ENUM ('beklemede', 'kabul_edildi', 'reddedildi');
 CREATE TYPE belge_turu      AS ENUM ('ruhsat', 'proje', 'sozlesme', 'denetim_raporu', 'fotograf', 'diger', 'tapu');
 CREATE TYPE gorusme_durumu  AS ENUM ('beklemede', 'onaylandi', 'reddedildi', 'tamamlandi');
+-- hesap_turu, mevcut "rol" (kullanici_rol) ve plan_turu alanlarından bağımsızdır:
+-- yalnızca panel görünümünü ve davet ödül otomasyonunu belirler.
+CREATE TYPE hesap_turu_tipi AS ENUM ('arsa_sahibi', 'muteahhit', 'her_ikisi');
 
 -- ------------------------------------------------------------
 -- 1. KULLANICILAR
@@ -56,6 +60,7 @@ CREATE TABLE public.kullanicilar (
   telefon       text,
   avatar_url    text,
   rol           kullanici_rol NOT NULL DEFAULT 'bireysel',
+  hesap_turu    hesap_turu_tipi NOT NULL DEFAULT 'arsa_sahibi',
   davet_kodu    text        UNIQUE,
   davet_eden_id uuid        REFERENCES public.kullanicilar(id) ON DELETE SET NULL,
   created_at    timestamptz NOT NULL DEFAULT now(),
@@ -76,30 +81,38 @@ CREATE POLICY "Kullanici kendi profilini guncelleyebilir"
 -- Kayıt sırasında bir davet kodu geldiyse (davet_referans_kodu), davet
 -- eden kullanıcıyı bul ve davet_eden_id'yi bağla. E-posta doğrulaması
 -- kapalı bir projede kullanıcı anında onaylı geldiyse (email_confirmed_at
--- dolu), ödül kaydını burada oluştur — aksi halde bu iş
+-- dolu), ödül kaydını burada başlat — aksi halde bu iş
 -- handle_davet_odul_kaydi() tetikleyicisiyle e-posta onayında yapılır.
+-- hesap_turu metadata'dan gelir (kayıt formundaki 3 seçenek); tanımsız/
+-- geçersizse arsa_sahibi'ye düşer.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_davet_eden_id uuid;
+  v_hesap_turu    hesap_turu_tipi;
 BEGIN
+  v_hesap_turu := CASE NEW.raw_user_meta_data->>'hesap_turu'
+    WHEN 'muteahhit' THEN 'muteahhit'::hesap_turu_tipi
+    WHEN 'her_ikisi' THEN 'her_ikisi'::hesap_turu_tipi
+    ELSE 'arsa_sahibi'::hesap_turu_tipi
+  END;
+
   SELECT id INTO v_davet_eden_id
   FROM public.kullanicilar
   WHERE davet_kodu = NEW.raw_user_meta_data->>'davet_referans_kodu';
 
-  INSERT INTO public.kullanicilar (id, email, ad_soyad, davet_kodu, davet_eden_id)
+  INSERT INTO public.kullanicilar (id, email, ad_soyad, davet_kodu, davet_eden_id, hesap_turu)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'ad_soyad', split_part(NEW.email, '@', 1)),
     public.gen_davet_kodu(),
-    v_davet_eden_id
+    v_davet_eden_id,
+    v_hesap_turu
   );
 
   IF v_davet_eden_id IS NOT NULL AND NEW.email_confirmed_at IS NOT NULL THEN
-    INSERT INTO public.davetler (davet_eden_id, davet_edilen_id)
-    VALUES (v_davet_eden_id, NEW.id)
-    ON CONFLICT (davet_edilen_id) DO NOTHING;
+    PERFORM public.davet_odulunu_baslat(v_davet_eden_id, NEW.id);
   END IF;
 
   RETURN NEW;
@@ -633,10 +646,16 @@ CREATE POLICY "Herkes tapu belgesi yukleyebilir"
 -- ------------------------------------------------------------
 -- 10. ARKADAŞINI DAVET ET SİSTEMİ
 -- Her kullanıcının benzersiz bir davet_kodu'su vardır (bkz. handle_new_user).
--- Yeni kullanıcı bu kodla kayıt olup e-postasını onaylayınca davet eden
--- kişi için "davetler" tablosunda ödülü henüz seçilmemiş bir kayıt açılır.
--- Ödül seçimi (teklif hakkı / süre uzatma) davet eden kişi tarafından
--- panelden yapılır ve davet_odulu_uygula() RPC'si ile uygulanır.
+-- Yeni kullanıcı bu kodla kayıt olup e-postasını onaylayınca
+-- davet_odulunu_baslat() çağrılır. Ödül türü davet eden kişinin
+-- hesap_turu'suna göre otomatik belirlenir:
+--   - muteahhit  → +1 teklif hakkı, anında uygulanır (bekleme yok).
+--   - arsa_sahibi → 15 gün süre uzatma; tam olarak 1 aktif ihalesi varsa
+--     anında o ihaleye uygulanır, değilse (0 ya da >1) panelden hangi
+--     ihaleye uygulanacağı seçilene kadar bekler.
+--   - her_ikisi  → ödül türünü de, ihaleyi de davet eden kişi panelden
+--     seçer (eski davranış).
+-- Panelden yapılan seçim davet_odulu_uygula() RPC'si ile uygulanır.
 -- ------------------------------------------------------------
 
 CREATE TYPE odul_turu AS ENUM ('teklif_hakki', 'sure_uzatma');
@@ -678,17 +697,69 @@ ALTER TABLE public.davetler ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Davet eden kendi davetlerini gorebilir"
   ON public.davetler FOR SELECT USING (auth.uid() = davet_eden_id);
 
+-- Davet eden kişinin hesap_turu'suna göre ödülü ya anında uygular ya da
+-- panelden seçilmek üzere bekleyen bir kayıt açar. SECURITY DEFINER —
+-- yalnızca handle_new_user/handle_davet_odul_kaydi tetikleyicilerinden
+-- çağrılır, doğrudan istemciden çağrılamaz (public RPC olarak açılmadı).
+CREATE OR REPLACE FUNCTION public.davet_odulunu_baslat(p_eden_id uuid, p_edilen_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_hesap_turu  hesap_turu_tipi;
+  v_ihale_id    uuid;
+  v_aktif_sayi  integer;
+BEGIN
+  SELECT hesap_turu INTO v_hesap_turu FROM public.kullanicilar WHERE id = p_eden_id;
+
+  IF v_hesap_turu = 'muteahhit' THEN
+    UPDATE public.kullanicilar
+    SET kalan_teklif_hakki = CASE
+      WHEN kalan_teklif_hakki >= 99999 THEN kalan_teklif_hakki
+      ELSE kalan_teklif_hakki + 1
+    END
+    WHERE id = p_eden_id;
+
+    INSERT INTO public.davetler (davet_eden_id, davet_edilen_id, odul_verildi, odul_turu, odul_verildi_tarihi)
+    VALUES (p_eden_id, p_edilen_id, true, 'teklif_hakki', now())
+    ON CONFLICT (davet_edilen_id) DO NOTHING;
+
+  ELSIF v_hesap_turu = 'arsa_sahibi' THEN
+    SELECT count(*) INTO v_aktif_sayi FROM public.ihaleler WHERE olusturan_id = p_eden_id AND durum = 'aktif';
+
+    IF v_aktif_sayi = 1 THEN
+      SELECT id INTO v_ihale_id FROM public.ihaleler WHERE olusturan_id = p_eden_id AND durum = 'aktif';
+
+      UPDATE public.ihaleler SET bitis_tarihi = bitis_tarihi + 15 WHERE id = v_ihale_id;
+
+      INSERT INTO public.davetler (davet_eden_id, davet_edilen_id, odul_verildi, odul_turu, uygulanan_ihale_id, odul_verildi_tarihi)
+      VALUES (p_eden_id, p_edilen_id, true, 'sure_uzatma', v_ihale_id, now())
+      ON CONFLICT (davet_edilen_id) DO NOTHING;
+    ELSE
+      -- 0 ya da >1 aktif ihale: hangisine uygulanacağı panelden seçilecek.
+      INSERT INTO public.davetler (davet_eden_id, davet_edilen_id, odul_turu)
+      VALUES (p_eden_id, p_edilen_id, 'sure_uzatma')
+      ON CONFLICT (davet_edilen_id) DO NOTHING;
+    END IF;
+
+  ELSE -- her_ikisi: ödül türünü de ihaleyi de davet eden kişi panelden seçer
+    INSERT INTO public.davetler (davet_eden_id, davet_edilen_id)
+    VALUES (p_eden_id, p_edilen_id)
+    ON CONFLICT (davet_edilen_id) DO NOTHING;
+  END IF;
+END;
+$$;
+
 -- E-posta onaylanınca (email_confirmed_at NULL'dan dolu hale geçince)
--- davet eden kişi için bekleyen ödül kaydını aç.
+-- ödül sürecini başlat.
 CREATE OR REPLACE FUNCTION public.handle_davet_odul_kaydi()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_eden_id uuid;
 BEGIN
   IF OLD.email_confirmed_at IS NULL AND NEW.email_confirmed_at IS NOT NULL THEN
-    INSERT INTO public.davetler (davet_eden_id, davet_edilen_id)
-    SELECT k.davet_eden_id, k.id
-    FROM public.kullanicilar k
-    WHERE k.id = NEW.id AND k.davet_eden_id IS NOT NULL
-    ON CONFLICT (davet_edilen_id) DO NOTHING;
+    SELECT davet_eden_id INTO v_eden_id FROM public.kullanicilar WHERE id = NEW.id;
+    IF v_eden_id IS NOT NULL THEN
+      PERFORM public.davet_odulunu_baslat(v_eden_id, NEW.id);
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -698,9 +769,13 @@ CREATE TRIGGER on_auth_user_email_confirmed
   AFTER UPDATE ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_davet_odul_kaydi();
 
--- Davet eden kişi ödülünü seçip uygular. auth.uid() ile davet_eden_id
--- eşleşmesi ve daha önce ödül verilmediği kontrol edilir; bu yüzden
--- SECURITY DEFINER olmasına rağmen anon-key ile çağrılması güvenlidir.
+-- Davet eden kişi bekleyen ödülünü uygular (panelden çağrılır).
+-- odul_turu davet açılışında zaten belirlenmişse (arsa_sahibi → sure_uzatma)
+-- istemciden gelen p_odul_turu yok sayılır, kayıttaki tür esas alınır —
+-- yalnızca her_ikisi kaynaklı (odul_turu NULL) davetlerde istemci seçimi
+-- geçerlidir. auth.uid() ile davet_eden_id eşleşmesi ve daha önce ödül
+-- verilmediği kontrol edilir; bu yüzden SECURITY DEFINER olmasına rağmen
+-- anon-key ile çağrılması güvenlidir.
 CREATE OR REPLACE FUNCTION public.davet_odulu_uygula(
   p_davet_id  uuid,
   p_odul_turu odul_turu,
@@ -708,7 +783,8 @@ CREATE OR REPLACE FUNCTION public.davet_odulu_uygula(
 )
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
-  v_davet public.davetler%ROWTYPE;
+  v_davet     public.davetler%ROWTYPE;
+  v_odul_turu odul_turu;
 BEGIN
   SELECT * INTO v_davet FROM public.davetler WHERE id = p_davet_id FOR UPDATE;
 
@@ -724,7 +800,9 @@ BEGIN
     RAISE EXCEPTION 'Bu davet için ödül zaten verildi';
   END IF;
 
-  IF p_odul_turu = 'teklif_hakki' THEN
+  v_odul_turu := COALESCE(v_davet.odul_turu, p_odul_turu);
+
+  IF v_odul_turu = 'teklif_hakki' THEN
     UPDATE public.kullanicilar
     SET kalan_teklif_hakki = CASE
       WHEN kalan_teklif_hakki >= 99999 THEN kalan_teklif_hakki
@@ -732,7 +810,7 @@ BEGIN
     END
     WHERE id = auth.uid();
 
-  ELSIF p_odul_turu = 'sure_uzatma' THEN
+  ELSIF v_odul_turu = 'sure_uzatma' THEN
     IF p_ihale_id IS NULL THEN
       RAISE EXCEPTION 'İhale seçimi zorunludur';
     END IF;
@@ -748,9 +826,45 @@ BEGIN
 
   UPDATE public.davetler
   SET odul_verildi        = true,
-      odul_turu            = p_odul_turu,
+      odul_turu            = v_odul_turu,
       uygulanan_ihale_id   = p_ihale_id,
       odul_verildi_tarihi  = now()
   WHERE id = p_davet_id;
+END;
+$$;
+
+-- signInWithOAuth() bir signUp() gibi bizim custom metadata'mızı taşımaz
+-- (data alanı yok); bu yüzden hesap_turu seçimi ve davet kodu bağlantısı
+-- Google/Apple ile kayıtta /auth/callback rotasından, oturum açıldıktan
+-- hemen sonra bu RPC ile tamamlanır. auth.uid() = kendi profili dışında
+-- hiçbir satırı etkilemez.
+CREATE OR REPLACE FUNCTION public.oauth_kayit_tamamla(
+  p_hesap_turu hesap_turu_tipi DEFAULT NULL,
+  p_ref_kodu   text DEFAULT NULL
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_eden_id  uuid;
+  v_mevcut   uuid;
+BEGIN
+  IF p_hesap_turu IS NOT NULL THEN
+    UPDATE public.kullanicilar SET hesap_turu = p_hesap_turu WHERE id = auth.uid();
+  END IF;
+
+  IF p_ref_kodu IS NOT NULL THEN
+    SELECT davet_eden_id INTO v_mevcut FROM public.kullanicilar WHERE id = auth.uid();
+
+    IF v_mevcut IS NULL THEN
+      SELECT id INTO v_eden_id FROM public.kullanicilar WHERE davet_kodu = upper(p_ref_kodu);
+
+      IF v_eden_id IS NOT NULL AND v_eden_id <> auth.uid() THEN
+        UPDATE public.kullanicilar SET davet_eden_id = v_eden_id WHERE id = auth.uid();
+
+        IF (SELECT email_confirmed_at FROM auth.users WHERE id = auth.uid()) IS NOT NULL THEN
+          PERFORM public.davet_odulunu_baslat(v_eden_id, auth.uid());
+        END IF;
+      END IF;
+    END IF;
+  END IF;
 END;
 $$;

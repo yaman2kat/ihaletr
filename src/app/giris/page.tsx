@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { GoogleIkon, AppleIkon, GozIkon, GozKapaliIkon } from "@/components/SosyalGirisIkonlari";
 
 function ceviriHata(mesaj: string): string {
   if (mesaj.includes("Invalid login credentials")) return "E-posta veya şifre hatalı.";
@@ -18,6 +19,8 @@ function GirisForm() {
   const searchParams = useSearchParams();
 
   const [form, setForm]             = useState({ email: "", sifre: "" });
+  const [beniHatirla, setBeniHatirla] = useState(true);
+  const [sifreGoster, setSifreGoster] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata]             = useState("");
 
@@ -33,7 +36,7 @@ function GirisForm() {
     setHata("");
     setYukleniyor(true);
 
-    const supabase = createClient();
+    const supabase = createClient(beniHatirla);
     const { error } = await supabase.auth.signInWithPassword({
       email:    form.email,
       password: form.sifre,
@@ -50,6 +53,16 @@ function GirisForm() {
     router.refresh();
   }
 
+  async function handleOAuth(provider: "google" | "apple") {
+    setHata("");
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+    });
+    if (error) setHata(ceviriHata(error.message));
+  }
+
   return (
     <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
@@ -64,6 +77,33 @@ function GirisForm() {
               {hata}
             </div>
           )}
+
+          {/* ─── Sosyal Giriş ─── */}
+          <div className="flex flex-col gap-3 mb-6">
+            <button
+              type="button"
+              onClick={() => handleOAuth("google")}
+              className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-lg py-2.5 font-semibold text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <GoogleIkon /> Google ile devam et
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth("apple")}
+              className="w-full flex items-center justify-center gap-3 rounded-lg py-2.5 font-semibold text-sm bg-black text-white hover:bg-gray-900 transition-colors"
+            >
+              <AppleIkon /> Apple ile devam et
+            </button>
+          </div>
+
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-4 text-sm text-gray-400">veya e-posta ile giriş yap</span>
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div>
@@ -90,16 +130,33 @@ function GirisForm() {
                   Şifremi Unuttum
                 </Link>
               </div>
-              <input
-                id="sifre"
-                type="password"
-                required
-                placeholder="••••••••"
-                value={form.sifre}
-                onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="relative">
+                <input
+                  id="sifre"
+                  type={sifreGoster ? "text" : "password"}
+                  required
+                  placeholder="••••••••"
+                  value={form.sifre}
+                  onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg pl-4 pr-10 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button type="button" onClick={() => setSifreGoster((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label={sifreGoster ? "Şifreyi gizle" : "Şifreyi göster"}
+                >
+                  {sifreGoster ? <GozKapaliIkon className="w-4.5 h-4.5" /> : <GozIkon className="w-4.5 h-4.5" />}
+                </button>
+              </div>
             </div>
+
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer -mt-2">
+              <input type="checkbox"
+                checked={beniHatirla}
+                onChange={(e) => setBeniHatirla(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-blue-700 focus:ring-blue-500"
+              />
+              Beni hatırla
+            </label>
 
             <button
               type="submit"
@@ -110,16 +167,7 @@ function GirisForm() {
             </button>
           </form>
 
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-white px-4 text-sm text-gray-400">veya</span>
-            </div>
-          </div>
-
-          <p className="text-center text-sm text-gray-600">
+          <p className="text-center text-sm text-gray-600 mt-6">
             Hesabınız yok mu?{" "}
             <Link
               href={`/kayit${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`}

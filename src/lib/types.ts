@@ -2,6 +2,10 @@ export type IhaleDurumu = "aktif" | "beklemede" | "tamamlandi" | "iptal";
 export type KullaniciRol = "arsa_sahibi" | "muteahhit";
 export type PlanTuru = "ucretsiz" | "premium" | "kurumsal";
 
+// Panel görünümünü ve davet ödül otomasyonunu belirler; mevcut
+// KullaniciRol/plan_turu alanlarından bağımsız, ayrı bir alandır.
+export type HesapTuru = "arsa_sahibi" | "muteahhit" | "her_ikisi";
+
 export type InsaatTuru = "Kentsel Dönüşüm" | "Kat Karşılığı" | "Yapı İnşaat" | "Bakım & Onarım";
 export type YetkiBelgesiGrubu = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "Geçici/Y Belgesi";
 export type InsaatAsamasi =
@@ -117,6 +121,7 @@ export interface Kullanici {
   firma_adi: string | null;
   telefon: string | null;
   rol?: KullaniciRol;
+  hesap_turu?: HesapTuru;
   plan_turu?: PlanTuru;
   premium_bitis_tarihi?: string | null;
   kalan_teklif_hakki?: number;

@@ -4,8 +4,9 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { KullaniciRol, YetkiBelgesiGrubu } from "@/lib/types";
+import type { HesapTuru, YetkiBelgesiGrubu } from "@/lib/types";
 import { YETKI_BELGESI_GRUPLARI } from "@/lib/muteahhit-yetki-belgesi";
+import { GoogleIkon, AppleIkon, GozIkon, GozKapaliIkon } from "@/components/SosyalGirisIkonlari";
 
 function ceviriHata(mesaj: string): string {
   if (mesaj.includes("User already registered") || mesaj.includes("already been registered"))
@@ -24,7 +25,7 @@ function KayitForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/panel";
   const girisHref = `/giris${next !== "/panel" ? `?next=${encodeURIComponent(next)}` : ""}`;
-  const [rol, setRol] = useState<KullaniciRol | null>(null);
+  const [hesapTuru, setHesapTuru] = useState<HesapTuru | null>(null);
   const [form, setForm] = useState({
     adSoyad:     "",
     email:       "",
@@ -36,9 +37,30 @@ function KayitForm() {
     sifre:       "",
     sifreTekrar: "",
   });
+  const [kvkkOnay,          setKvkkOnay]          = useState(false);
+  const [sifreGoster,       setSifreGoster]       = useState(false);
+  const [sifreTekrarGoster, setSifreTekrarGoster] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata]             = useState("");
   const [basariliId, setBasariliId] = useState<string | null>(null);
+
+  // Müteahhit'e özgü alanlar (firma adı, yetki belgesi) hem "muteahhit"
+  // hem de "her_ikisi" hesap türünde gösterilir/zorunludur.
+  const muteahhitAlanlariGerekli = hesapTuru === "muteahhit" || hesapTuru === "her_ikisi";
+
+  async function handleOAuth(provider: "google" | "apple") {
+    setHata("");
+    const supabase = createClient();
+    const params = new URLSearchParams({ next });
+    if (hesapTuru) params.set("hesap_turu", hesapTuru);
+    if (form.davetKodu.trim()) params.set("ref", form.davetKodu.trim().toUpperCase());
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/auth/callback?${params.toString()}` },
+    });
+    if (error) setHata(ceviriHata(error.message));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,12 +74,16 @@ function KayitForm() {
       setHata("Şifre en az 6 karakter olmalıdır.");
       return;
     }
-    if (rol === "muteahhit" && !form.firmaAdi.trim()) {
+    if (muteahhitAlanlariGerekli && !form.firmaAdi.trim()) {
       setHata("Müteahhit kaydı için firma adı zorunludur.");
       return;
     }
-    if (rol === "muteahhit" && !form.yetkiBelgesiGrubu) {
+    if (muteahhitAlanlariGerekli && !form.yetkiBelgesiGrubu) {
       setHata("Müteahhit kaydı için Müteahhitlik Yetki Belgesi Grubu zorunludur.");
+      return;
+    }
+    if (!kvkkOnay) {
+      setHata("Devam etmek için Kullanım Koşulları ve Gizlilik Politikasını (KVKK) onaylamalısınız.");
       return;
     }
 
@@ -73,7 +99,7 @@ function KayitForm() {
           ad_soyad:  form.adSoyad,
           firma_adi: form.firmaAdi || null,
           telefon:   form.telefon  || null,
-          rol:       rol,
+          hesap_turu: hesapTuru,
           davet_referans_kodu: form.davetKodu.trim() ? form.davetKodu.trim().toUpperCase() : null,
         },
       },
@@ -95,8 +121,8 @@ function KayitForm() {
       return;
     }
 
-    // Müteahhit ise profil kaydı oluşturmayı dene
-    if (rol === "muteahhit" && data.user) {
+    // Müteahhit ya da Her İkisi ise profil kaydı oluşturmayı dene
+    if (muteahhitAlanlariGerekli && data.user) {
       try {
         await supabase.from("muteahhit_profiller").insert({
           kullanici_id:            data.user.id,
@@ -116,7 +142,7 @@ function KayitForm() {
       }
       setBasariliId(data.user.id);
     } else {
-      setBasariliId(data.user?.id ?? "arsa_sahibi");
+      setBasariliId(data.user?.id ?? "kayit-tamam");
     }
 
     setYukleniyor(false);
@@ -124,7 +150,6 @@ function KayitForm() {
 
   // ── Başarı ekranı ──────────────────────────────────────────
   if (basariliId) {
-    const isMuteahhit = rol === "muteahhit" && basariliId !== "arsa_sahibi";
     return (
       <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md text-center">
@@ -144,7 +169,7 @@ function KayitForm() {
             <p className="text-gray-400 text-xs mb-6">
               Mail gelmiyorsa spam / gereksiz posta klasörünüzü kontrol edin.
             </p>
-            {isMuteahhit && (
+            {muteahhitAlanlariGerekli && (
               <p className="text-sm text-blue-700 bg-blue-50 rounded-lg px-4 py-3 mb-6">
                 Giriş yaptıktan sonra müteahhit profilinizi tamamlayabilirsiniz.
               </p>
@@ -162,19 +187,19 @@ function KayitForm() {
   }
 
   // ── Rol Seçimi ─────────────────────────────────────────────
-  if (!rol) {
+  if (!hesapTuru) {
     return (
       <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-3xl">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Kayıt Ol</h1>
             <p className="text-gray-500 mt-2">Hesap türünüzü seçin</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             {/* Arsa Sahibi */}
             <button
               type="button"
-              onClick={() => setRol("arsa_sahibi")}
+              onClick={() => setHesapTuru("arsa_sahibi")}
               className="group flex flex-col items-center text-center gap-4 bg-white border-2 border-gray-200 rounded-2xl p-8 hover:border-blue-500 hover:shadow-md transition-all"
             >
               <div className="w-16 h-16 rounded-2xl bg-blue-50 group-hover:bg-blue-100 transition-colors flex items-center justify-center">
@@ -197,7 +222,7 @@ function KayitForm() {
             {/* Müteahhit */}
             <button
               type="button"
-              onClick={() => setRol("muteahhit")}
+              onClick={() => setHesapTuru("muteahhit")}
               className="group flex flex-col items-center text-center gap-4 bg-white border-2 border-gray-200 rounded-2xl p-8 hover:border-orange-500 hover:shadow-md transition-all"
             >
               <div className="w-16 h-16 rounded-2xl bg-orange-50 group-hover:bg-orange-100 transition-colors flex items-center justify-center">
@@ -216,6 +241,29 @@ function KayitForm() {
                 Müteahhit Olarak Kayıt →
               </span>
             </button>
+
+            {/* Her İkisi */}
+            <button
+              type="button"
+              onClick={() => setHesapTuru("her_ikisi")}
+              className="group flex flex-col items-center text-center gap-4 bg-white border-2 border-gray-200 rounded-2xl p-8 hover:border-purple-500 hover:shadow-md transition-all"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-purple-50 group-hover:bg-purple-100 transition-colors flex items-center justify-center">
+                <svg className="w-8 h-8 text-purple-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m5-4a4 4 0 100-8 4 4 0 000 8zm6 3.13a4 4 0 010 7.75M7 12.13a4 4 0 000 7.75" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-lg font-bold text-gray-900 mb-1">Her İkisi</p>
+                <p className="text-sm text-gray-500 leading-relaxed">
+                  Hem arsa sahibi olarak ihale açın hem müteahhit olarak tekliflere katılın.
+                </p>
+              </div>
+              <span className="text-sm text-purple-700 font-semibold group-hover:underline">
+                Her İkisi Olarak Kayıt →
+              </span>
+            </button>
           </div>
 
           <p className="text-center text-sm text-gray-600 mt-8">
@@ -230,22 +278,22 @@ function KayitForm() {
   }
 
   // ── Kayıt Formu ────────────────────────────────────────────
-  const isMuteahhit = rol === "muteahhit";
+  const isMuteahhit = muteahhitAlanlariGerekli;
+  const rozetEtiket = hesapTuru === "muteahhit" ? "Müteahhit Kaydı" : hesapTuru === "her_ikisi" ? "Her İkisi Kaydı" : "Arsa Sahibi Kaydı";
+  const rozetCls = hesapTuru === "muteahhit" ? "bg-orange-100 text-orange-700" : hesapTuru === "her_ikisi" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700";
   return (
     <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
         <div className="text-center mb-8">
           <button
             type="button"
-            onClick={() => { setRol(null); setHata(""); }}
+            onClick={() => { setHesapTuru(null); setHata(""); }}
             className="text-sm text-gray-400 hover:text-gray-700 mb-4 inline-flex items-center gap-1"
           >
             ← Geri
           </button>
-          <div className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-1 rounded-full mb-3 ${
-            isMuteahhit ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
-          }`}>
-            {isMuteahhit ? "Müteahhit Kaydı" : "Arsa Sahibi Kaydı"}
+          <div className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-1 rounded-full mb-3 ${rozetCls}`}>
+            {rozetEtiket}
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Kayıt Ol</h1>
           <p className="text-gray-500 mt-2">Ücretsiz hesap oluşturun</p>
@@ -257,6 +305,33 @@ function KayitForm() {
               {hata}
             </div>
           )}
+
+          {/* ─── Sosyal Giriş ─── */}
+          <div className="flex flex-col gap-3 mb-6">
+            <button
+              type="button"
+              onClick={() => handleOAuth("google")}
+              className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-lg py-2.5 font-semibold text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <GoogleIkon /> Google ile devam et
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth("apple")}
+              className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-lg py-2.5 font-semibold text-sm text-gray-700 hover:bg-gray-50 transition-colors bg-black text-white hover:bg-gray-900"
+            >
+              <AppleIkon /> Apple ile devam et
+            </button>
+          </div>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-4 text-sm text-gray-400">veya e-posta ile kayıt ol</span>
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -358,42 +433,66 @@ function KayitForm() {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5" htmlFor="sifre">
                   Şifre <span className="text-red-500">*</span>
                 </label>
-                <input id="sifre" type="password" required
-                  placeholder="Min. 6 karakter"
-                  value={form.sifre}
-                  onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
+                <div className="relative">
+                  <input id="sifre" type={sifreGoster ? "text" : "password"} required
+                    placeholder="Min. 6 karakter"
+                    value={form.sifre}
+                    onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg pl-4 pr-10 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  <button type="button" onClick={() => setSifreGoster((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label={sifreGoster ? "Şifreyi gizle" : "Şifreyi göster"}
+                  >
+                    {sifreGoster ? <GozKapaliIkon className="w-4.5 h-4.5" /> : <GozIkon className="w-4.5 h-4.5" />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5" htmlFor="sifreTekrar">
                   Şifre Tekrar <span className="text-red-500">*</span>
                 </label>
-                <input id="sifreTekrar" type="password" required
-                  placeholder="••••••••"
-                  value={form.sifreTekrar}
-                  onChange={(e) => setForm((f) => ({ ...f, sifreTekrar: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
+                <div className="relative">
+                  <input id="sifreTekrar" type={sifreTekrarGoster ? "text" : "password"} required
+                    placeholder="••••••••"
+                    value={form.sifreTekrar}
+                    onChange={(e) => setForm((f) => ({ ...f, sifreTekrar: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg pl-4 pr-10 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  <button type="button" onClick={() => setSifreTekrarGoster((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label={sifreTekrarGoster ? "Şifreyi gizle" : "Şifreyi göster"}
+                  >
+                    {sifreTekrarGoster ? <GozKapaliIkon className="w-4.5 h-4.5" /> : <GozIkon className="w-4.5 h-4.5" />}
+                  </button>
+                </div>
               </div>
             </div>
 
-            <p className="text-xs text-gray-500">
-              Kayıt olarak{" "}
-              <Link href="/kullanim-kosullari" className="text-blue-700 hover:underline">
-                Kullanım Koşullarını
-              </Link>{" "}
-              ve{" "}
-              <Link href="/gizlilik" className="text-blue-700 hover:underline">
-                Gizlilik Politikasını
-              </Link>{" "}
-              kabul etmiş olursunuz.
-            </p>
+            <label className="flex items-start gap-2.5 text-xs text-gray-500 cursor-pointer">
+              <input type="checkbox" required
+                checked={kvkkOnay}
+                onChange={(e) => setKvkkOnay(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-700 focus:ring-blue-500"
+              />
+              <span>
+                <Link href="/kullanim-kosullari" className="text-blue-700 hover:underline">
+                  Kullanım Koşullarını
+                </Link>{" "}
+                ve{" "}
+                <Link href="/gizlilik" className="text-blue-700 hover:underline">
+                  Gizlilik Politikasını (KVKK)
+                </Link>{" "}
+                okudum, kabul ediyorum. <span className="text-red-500">*</span>
+              </span>
+            </label>
 
             <button type="submit" disabled={yukleniyor}
               className={`w-full text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
-                isMuteahhit
+                hesapTuru === "muteahhit"
                   ? "bg-orange-600 hover:bg-orange-700"
+                  : hesapTuru === "her_ikisi"
+                  ? "bg-purple-700 hover:bg-purple-800"
                   : "bg-blue-700 hover:bg-blue-800"
               }`}>
               {yukleniyor ? "Kayıt oluşturuluyor…" : "Kayıt Ol"}
