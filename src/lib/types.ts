@@ -6,6 +6,25 @@ export type PlanTuru = "ucretsiz" | "premium" | "kurumsal";
 // KullaniciRol/plan_turu alanlarından bağımsız, ayrı bir alandır.
 export type HesapTuru = "arsa_sahibi" | "muteahhit" | "her_ikisi";
 
+export type MulkiyetDurumu = "tek_malik" | "hisseli" | "vekaleten" | "sirket";
+export type IncelemeDurumu = "beklemede" | "onaylandi" | "reddedildi";
+export type BelgeTuru =
+  | "ruhsat" | "proje" | "sozlesme" | "denetim_raporu" | "fotograf" | "diger"
+  | "tapu" | "vekaletname" | "imza_sirkuleri";
+
+export interface Belge {
+  id: string;
+  baslik: string;
+  dosya_url: string;
+  dosya_tipi?: string | null;
+  boyut?: number | null;
+  tur: BelgeTuru;
+  ihale_id?: string | null;
+  danishman_id?: string | null;
+  yukleyen_id?: string | null;
+  created_at: string;
+}
+
 export type InsaatTuru = "Kentsel Dönüşüm" | "Kat Karşılığı" | "Yapı İnşaat" | "Bakım & Onarım";
 export type YetkiBelgesiGrubu = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "Geçici/Y Belgesi";
 export type InsaatAsamasi =
@@ -111,6 +130,12 @@ export interface Ihale {
   goruntulenme_sayisi?: number;
   yuzolcumu_m2?: number;
   olusturan_id?: string | null;
+  mulkiyet_durumu?: MulkiyetDurumu | null;
+  basvuru_sahibi_adi?: string | null;
+  sirket_unvani?: string | null;
+  yetkili_kisi_adi?: string | null;
+  inceleme_durumu?: IncelemeDurumu;
+  red_sebebi?: string | null;
   created_at: string;
 }
 

@@ -32,6 +32,8 @@ DROP TYPE IF EXISTS belge_turu      CASCADE;
 DROP TYPE IF EXISTS gorusme_durumu  CASCADE;
 DROP TYPE IF EXISTS odul_turu       CASCADE;
 DROP TYPE IF EXISTS hesap_turu_tipi CASCADE;
+DROP TYPE IF EXISTS mulkiyet_durumu_tipi CASCADE;
+DROP TYPE IF EXISTS inceleme_durumu CASCADE;
 
 -- ------------------------------------------------------------
 -- 0. ENUM TİPLERİ
@@ -40,11 +42,15 @@ DROP TYPE IF EXISTS hesap_turu_tipi CASCADE;
 CREATE TYPE kullanici_rol   AS ENUM ('bireysel', 'firma', 'admin');
 CREATE TYPE ihale_durumu    AS ENUM ('aktif', 'beklemede', 'tamamlandi', 'iptal');
 CREATE TYPE teklif_durumu   AS ENUM ('beklemede', 'kabul_edildi', 'reddedildi');
-CREATE TYPE belge_turu      AS ENUM ('ruhsat', 'proje', 'sozlesme', 'denetim_raporu', 'fotograf', 'diger', 'tapu');
+CREATE TYPE belge_turu      AS ENUM ('ruhsat', 'proje', 'sozlesme', 'denetim_raporu', 'fotograf', 'diger', 'tapu', 'vekaletname', 'imza_sirkuleri');
 CREATE TYPE gorusme_durumu  AS ENUM ('beklemede', 'onaylandi', 'reddedildi', 'tamamlandi');
 -- hesap_turu, mevcut "rol" (kullanici_rol) ve plan_turu alanlarından bağımsızdır:
 -- yalnızca panel görünümünü ve davet ödül otomasyonunu belirler.
 CREATE TYPE hesap_turu_tipi AS ENUM ('arsa_sahibi', 'muteahhit', 'her_ikisi');
+-- İhale sahibinin taşınmazla ilişkisi; admin tapu doğrulamasında kullanır.
+CREATE TYPE mulkiyet_durumu_tipi AS ENUM ('tek_malik', 'hisseli', 'vekaleten', 'sirket');
+-- Admin'in ihaleyi mülkiyet belgelerine göre onaylayıp onaylamadığı.
+CREATE TYPE inceleme_durumu AS ENUM ('beklemede', 'onaylandi', 'reddedildi');
 
 -- ------------------------------------------------------------
 -- 1. KULLANICILAR
@@ -143,16 +149,28 @@ CREATE TABLE public.ihaleler (
   ada_no            text,
   parsel_no         text,
   olusturan_id      uuid          REFERENCES public.kullanicilar(id) ON DELETE SET NULL,
+  -- Taşınmaz mülkiyet doğrulama (admin incelemesi için)
+  mulkiyet_durumu    mulkiyet_durumu_tipi,
+  basvuru_sahibi_adi text,              -- oluşturma anındaki kullanicilar.ad_soyad kopyası
+  sirket_unvani      text,              -- yalnızca mulkiyet_durumu = 'sirket'
+  yetkili_kisi_adi   text,              -- yalnızca mulkiyet_durumu = 'sirket'
+  inceleme_durumu    inceleme_durumu NOT NULL DEFAULT 'beklemede',
+  red_sebebi         text,
   created_at        timestamptz   NOT NULL DEFAULT now(),
   updated_at        timestamptz   NOT NULL DEFAULT now(),
 
-  CONSTRAINT bitis_baslangictan_sonra CHECK (bitis_tarihi > baslangic_tarihi)
+  CONSTRAINT bitis_baslangictan_sonra CHECK (bitis_tarihi > baslangic_tarihi),
+  CONSTRAINT red_sebebi_zorunlu CHECK (
+    inceleme_durumu <> 'reddedildi'
+    OR (red_sebebi IS NOT NULL AND length(trim(red_sebebi)) > 0)
+  )
 );
 
 CREATE INDEX idx_ihaleler_durum    ON public.ihaleler(durum);
 CREATE INDEX idx_ihaleler_kategori ON public.ihaleler(kategori);
 CREATE INDEX idx_ihaleler_sehir    ON public.ihaleler(sehir);
 CREATE INDEX idx_ihaleler_bitis    ON public.ihaleler(bitis_tarihi);
+CREATE INDEX idx_ihaleler_inceleme_durumu ON public.ihaleler(inceleme_durumu);
 
 ALTER TABLE public.ihaleler ENABLE ROW LEVEL SECURITY;
 
@@ -171,6 +189,13 @@ CREATE POLICY "Giris yapan ya da misafir ihale olusturabilir"
 
 CREATE POLICY "Olusturan ihalesini guncelleyebilir"
   ON public.ihaleler FOR UPDATE USING (auth.uid() = olusturan_id);
+
+-- Admin, mülkiyet doğrulama incelemesi için herhangi bir ihaleyi
+-- (inceleme_durumu/red_sebebi) güncelleyebilir.
+CREATE POLICY "Admin ihaleyi inceleyebilir"
+  ON public.ihaleler FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM public.kullanicilar WHERE id = auth.uid() AND rol = 'admin')
+  );
 
 CREATE POLICY "Olusturan ihalesini silebilir"
   ON public.ihaleler FOR DELETE USING (auth.uid() = olusturan_id);
@@ -313,12 +338,12 @@ CREATE INDEX idx_belgeler_yukleyen  ON public.belgeler(yukleyen_id);
 
 ALTER TABLE public.belgeler ENABLE ROW LEVEL SECURITY;
 
--- Tapu Fotokopisi yalnızca ihalenin gerçekliğini doğrulamak için istenir;
--- ihale sahibi, teklif veren müteahhitler ya da başka hiçbir kullanıcı
--- göremez/indiremez. Sadece admin rolündeki kullanıcılar erişebilir.
-CREATE POLICY "Tapu haricindeki belgeler herkese acik"
+-- Tapu, vekaletname ve imza sirküleri yalnızca mülkiyet doğrulama
+-- amaçlıdır; ihale sahibi, teklif veren müteahhitler ya da başka hiçbir
+-- kullanıcı göremez/indiremez. Sadece admin rolündeki kullanıcılar erişebilir.
+CREATE POLICY "Hassas belgeler sadece admin, digerleri herkese acik"
   ON public.belgeler FOR SELECT USING (
-    tur <> 'tapu'
+    tur NOT IN ('tapu', 'vekaletname', 'imza_sirkuleri')
     OR EXISTS (SELECT 1 FROM public.kullanicilar WHERE id = auth.uid() AND rol = 'admin')
   );
 

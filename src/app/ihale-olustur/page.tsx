@@ -6,12 +6,23 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
 import { PLAN_MAKS_IHALE_GUNU } from "@/lib/plan-limitleri";
-import type { PlanTuru } from "@/lib/types";
+import type { PlanTuru, MulkiyetDurumu } from "@/lib/types";
 
 const TASLAK_ANAHTARI = "ihale-olustur-taslak";
 
-type DosyaAlanAdi = "sartname" | "sozlesme" | "proje" | "tapu";
+type DosyaAlanAdi = "sartname" | "sozlesme" | "proje" | "tapu" | "vekaletname" | "imzaSirkuleri";
 type DosyalarState = Record<DosyaAlanAdi, File | null>;
+
+const MULKIYET_SECENEKLERI: { deger: MulkiyetDurumu; etiket: string; aciklama: string }[] = [
+  { deger: "tek_malik", etiket: "Tek Malikim",
+    aciklama: "Taşınmazın tek maliki sizsiniz." },
+  { deger: "hisseli", etiket: "Hisseli Mülkiyet",
+    aciklama: "Taşınmazda başka hissedarlar da var." },
+  { deger: "vekaleten", etiket: "Vekaleten İşlem Yapıyorum",
+    aciklama: "Malik adına vekaletle işlem yapıyorsunuz." },
+  { deger: "sirket", etiket: "Şirket Adına",
+    aciklama: "Taşınmaz bir şirket/tüzel kişilik adına kayıtlı." },
+];
 
 interface DosyaTaslak { ad: string; tip: string; veriUrl: string; }
 interface Taslak {
@@ -63,11 +74,16 @@ export default function IhaleOlustur() {
     baslangicFiyati: "", bitisTarihi: "",
     yapiInsaatRuhsati: "" as "" | "var" | "yok",
     proje: "" as "" | "var" | "yok",
+    mulkiyetDurumu: "" as "" | MulkiyetDurumu,
+    sirketUnvani: "", yetkiliKisiAdi: "",
   });
+  const [basvuruSahibiAdi, setBasvuruSahibiAdi] = useState("");
   const [eksikAlanlar, setEksikAlanlar] = useState<string[]>([]);
   const [otomatikSonlandirmaOnay, setOtomatikSonlandirmaOnay] = useState(false);
   const [adaParselBildirim, setAdaParselBildirim] = useState(false);
-  const [dosyalar, setDosyalar] = useState<DosyalarState>({ sartname: null, sozlesme: null, proje: null, tapu: null });
+  const [dosyalar, setDosyalar] = useState<DosyalarState>({
+    sartname: null, sozlesme: null, proje: null, tapu: null, vekaletname: null, imzaSirkuleri: null,
+  });
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState("");
   const taslakYuklendiRef = useRef(false);
@@ -78,10 +94,11 @@ export default function IhaleOlustur() {
       if (!session?.user) return;
       const { data } = await supabase
         .from("kullanicilar")
-        .select("plan_turu")
+        .select("plan_turu, ad_soyad")
         .eq("id", session.user.id)
         .single();
       if (data?.plan_turu) setPlanTuru(data.plan_turu);
+      if (data?.ad_soyad) setBasvuruSahibiAdi(data.ad_soyad);
     });
   }, []);
 
@@ -98,7 +115,9 @@ export default function IhaleOlustur() {
             setOtomatikSonlandirmaOnay(taslak.otomatikSonlandirmaOnay);
           }
           if (taslak.dosyalar) {
-            const yeniDosyalar: DosyalarState = { sartname: null, sozlesme: null, proje: null, tapu: null };
+            const yeniDosyalar: DosyalarState = {
+              sartname: null, sozlesme: null, proje: null, tapu: null, vekaletname: null, imzaSirkuleri: null,
+            };
             (Object.keys(yeniDosyalar) as DosyaAlanAdi[]).forEach((alan) => {
               const dt = taslak.dosyalar[alan];
               if (dt) yeniDosyalar[alan] = dosyaGeriYukle(dt);
@@ -150,6 +169,11 @@ export default function IhaleOlustur() {
     if (!dosyalar.sartname)           eksik.push("Yapı Şartnamesi");
     if (!dosyalar.tapu)               eksik.push("Tapu Fotokopisi");
     if (form.proje === "var" && !dosyalar.proje) eksik.push("Bina Projesi (Proje Var seçildi)");
+    if (!form.mulkiyetDurumu)         eksik.push("Mülkiyet Durumu");
+    if (form.mulkiyetDurumu === "sirket") {
+      if (!form.sirketUnvani.trim())   eksik.push("Şirket Unvanı");
+      if (!form.yetkiliKisiAdi.trim()) eksik.push("Yetkili Kişi Adı");
+    }
     if (planTuru === "ucretsiz" && !otomatikSonlandirmaOnay) eksik.push("Otomatik sonlandırma onayı");
     return eksik;
   }
@@ -199,6 +223,10 @@ export default function IhaleOlustur() {
         yapi_insaat_ruhsati:    form.yapiInsaatRuhsati || null,
         proje:                  form.proje || null,
         olusturan_id:           kullaniciId,
+        mulkiyet_durumu:        form.mulkiyetDurumu || null,
+        basvuru_sahibi_adi:     basvuruSahibiAdi || null,
+        sirket_unvani:          form.mulkiyetDurumu === "sirket" ? form.sirketUnvani.trim()   : null,
+        yetkili_kisi_adi:       form.mulkiyetDurumu === "sirket" ? form.yetkiliKisiAdi.trim()  : null,
       })
       .select("id")
       .single();
@@ -238,12 +266,18 @@ export default function IhaleOlustur() {
       });
     };
 
-    // Tapu Fotokopisi: herkese kapalı ayrı bir bucket'a yüklenir, ortak
-    // dosyaYukle akışının aksine genel-erişim URL'i üretilmez/saklanmaz —
-    // yalnızca admin RLS politikasıyla storage'dan okuyabilir.
-    const tapuYukle = async (dosya: File | null) => {
+    // Tapu, vekaletname/hissedar onayı ve imza sirküleri: herkese kapalı
+    // ayrı bir bucket'a yüklenir, ortak dosyaYukle akışının aksine
+    // genel-erişim URL'i üretilmez/saklanmaz — yalnızca admin RLS
+    // politikasıyla storage'dan okuyabilir.
+    const gizliBelgeYukle = async (
+      dosya: File | null,
+      tur: "tapu" | "vekaletname" | "imza_sirkuleri",
+      baslik: string,
+      dosyaAdiOnEki: string
+    ) => {
       if (!dosya) return;
-      const yol = `${ihaleData.id}/tapu-${Date.now()}-${dosya.name}`;
+      const yol = `${ihaleData.id}/${dosyaAdiOnEki}-${Date.now()}-${dosya.name}`;
       const { data: storageData, error: storageError } = await supabase.storage
         .from("ihale-tapu-belgeleri")
         .upload(yol, dosya, { upsert: false });
@@ -251,11 +285,11 @@ export default function IhaleOlustur() {
       if (storageError || !storageData) return;
 
       await supabase.from("belgeler").insert({
-        baslik:      "Tapu Fotokopisi",
+        baslik,
         dosya_url:   yol, // özel bucket içindeki yol — herkese açık URL değil
         dosya_tipi:  dosya.type,
         boyut:       dosya.size,
-        tur:         "tapu",
+        tur,
         ihale_id:    ihaleData.id,
         yukleyen_id: kullaniciId,
       });
@@ -265,7 +299,9 @@ export default function IhaleOlustur() {
       dosyaYukle(dosyalar.sartname, "proje",   "Yapı Şartnamesi"),
       dosyaYukle(dosyalar.sozlesme, "sozlesme", "Sözleşme Tasarısı"),
       dosyaYukle(dosyalar.proje,    "proje",    "Bina Projesi"),
-      tapuYukle(dosyalar.tapu),
+      gizliBelgeYukle(dosyalar.tapu,         "tapu",           "Tapu Fotokopisi",                     "tapu"),
+      gizliBelgeYukle(dosyalar.vekaletname,  "vekaletname",    "Vekaletname / Hissedar Onay Belgesi", "vekaletname"),
+      gizliBelgeYukle(dosyalar.imzaSirkuleri,"imza_sirkuleri", "İmza Sirküleri",                      "imza-sirkuleri"),
     ]);
 
     setYukleniyor(false);
@@ -559,6 +595,64 @@ export default function IhaleOlustur() {
             </div>
           </div>
 
+          {/* Mülkiyet Durumu */}
+          <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
+            <p className="text-sm font-semibold text-gray-700 mb-1">
+              Bu taşınmazın mülkiyet durumu nedir? <span className="text-red-500">*</span>
+            </p>
+            <p className="text-xs text-gray-400 mb-3">
+              Bu bilgi yalnızca admin incelemesinde tapu belgesiyle karşılaştırma amaçlıdır.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {MULKIYET_SECENEKLERI.map((s) => (
+                <label
+                  key={s.deger}
+                  className={`flex items-start gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all bg-white ${
+                    form.mulkiyetDurumu === s.deger ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="mulkiyetDurumu"
+                    value={s.deger}
+                    checked={form.mulkiyetDurumu === s.deger}
+                    onChange={() => guncelle("mulkiyetDurumu", s.deger)}
+                    className="mt-0.5 text-blue-600 w-4 h-4 flex-shrink-0"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-900">{s.etiket}</span>
+                    <span className="block text-xs text-gray-400">{s.aciklama}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {form.mulkiyetDurumu === "sirket" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                    Şirket Unvanı <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text" required placeholder="Örn: ABC İnşaat A.Ş."
+                    value={form.sirketUnvani} onChange={(e) => guncelle("sirketUnvani", e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                    Yetkili Kişi Adı <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text" required placeholder="Örn: Ahmet Yılmaz"
+                    value={form.yetkiliKisiAdi} onChange={(e) => guncelle("yetkiliKisiAdi", e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Belgeler */}
           <div className="border-t border-gray-100 pt-5">
             <h2 className="text-sm font-semibold text-gray-900 mb-4">Belgeler</h2>
@@ -597,7 +691,37 @@ export default function IhaleOlustur() {
                   Yalnızca ihalenin gerçekliğini doğrulamak için istenir. Kimseyle paylaşılmaz;
                   yalnızca yetkili yöneticiler erişebilir.
                 </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  e-Devlet üzerinden alınan, taşınmazın tüm hak sahiplerini gösteren QR kodlu/barkodlu
+                  tapu bilgisi belgesinin yüklenmesi gerekmektedir.
+                </p>
               </div>
+              {(form.mulkiyetDurumu === "hisseli" || form.mulkiyetDurumu === "vekaleten") && (
+                <div>
+                  <DosyaAlani
+                    label="Vekaletname veya Hissedar Onay Belgesi"
+                    kabul=".pdf"
+                    dosya={dosyalar.vekaletname}
+                    onChange={(f) => setDosyalar((d) => ({ ...d, vekaletname: f }))}
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Yalnızca admin incelemesi için kullanılır; kimseyle paylaşılmaz.
+                  </p>
+                </div>
+              )}
+              {form.mulkiyetDurumu === "sirket" && (
+                <div>
+                  <DosyaAlani
+                    label="İmza Sirküleri"
+                    kabul=".pdf"
+                    dosya={dosyalar.imzaSirkuleri}
+                    onChange={(f) => setDosyalar((d) => ({ ...d, imzaSirkuleri: f }))}
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Yalnızca admin incelemesi için kullanılır; kimseyle paylaşılmaz.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

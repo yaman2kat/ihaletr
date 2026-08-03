@@ -6,6 +6,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <header className="bg-gray-900 text-white px-6 py-3 flex items-center gap-6">
         <span className="font-bold text-base tracking-tight">İhaleTR Admin</span>
         <nav className="flex items-center gap-4 text-sm">
+          <Link href="/admin/ihaleler" className="text-gray-300 hover:text-white transition-colors">
+            İhaleler
+          </Link>
           <Link href="/admin/danismanlar" className="text-gray-300 hover:text-white transition-colors">
             Destek Uzmanları
           </Link>
