@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import type { HesapTuru } from "@/lib/types";
 
 const PLAN_BADGE: Record<string, { etiket: string; cls: string }> = {
   ucretsiz: { etiket: "Ücretsiz", cls: "bg-gray-100 text-gray-500" },
@@ -18,6 +19,7 @@ export default function Navbar() {
   const [kullanici,  setKullanici]  = useState<User | null | undefined>(undefined);
   const [planTuru,   setPlanTuru]   = useState<string | null>(null);
   const [kalanHak,   setKalanHak]   = useState<number | null>(null);
+  const [hesapTuru,  setHesapTuru]  = useState<HesapTuru | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -25,11 +27,12 @@ export default function Navbar() {
     async function profilGetir(userId: string) {
       const { data } = await supabase
         .from("kullanicilar")
-        .select("plan_turu, kalan_teklif_hakki")
+        .select("plan_turu, kalan_teklif_hakki, hesap_turu")
         .eq("id", userId)
         .single();
       setPlanTuru(data?.plan_turu ?? "ucretsiz");
       setKalanHak(data?.kalan_teklif_hakki ?? 0);
+      setHesapTuru((data?.hesap_turu as HesapTuru) ?? "arsa_sahibi");
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -41,7 +44,7 @@ export default function Navbar() {
       (_event, session) => {
         setKullanici(session?.user ?? null);
         if (session?.user) profilGetir(session.user.id);
-        else { setPlanTuru(null); setKalanHak(null); }
+        else { setPlanTuru(null); setKalanHak(null); setHesapTuru(null); }
       }
     );
 
@@ -94,13 +97,13 @@ export default function Navbar() {
                   >
                     {adSoyad}
                   </Link>
-                  {planTuru && (
+                  {planTuru && (hesapTuru === "arsa_sahibi" || hesapTuru === "her_ikisi") && (
                     <Link href="/premium"
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap transition-opacity hover:opacity-80 ${PLAN_BADGE[planTuru]?.cls ?? PLAN_BADGE.ucretsiz.cls}`}>
                       {PLAN_BADGE[planTuru]?.etiket ?? "Ücretsiz"}
                     </Link>
                   )}
-                  {kalanHak !== null && (
+                  {kalanHak !== null && (hesapTuru === "muteahhit" || hesapTuru === "her_ikisi") && (
                     <Link href="/teklif-paketi"
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap transition-opacity hover:opacity-80 ${
                         kalanHak >= 99999

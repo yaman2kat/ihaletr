@@ -3,8 +3,15 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import type { Ihale } from "@/lib/types";
+import type { Ihale, PlanTuru } from "@/lib/types";
+import { PLAN_MAKS_IHALE_GUNU } from "@/lib/plan-limitleri";
 import { kalanGun, kalanSure, tarihFormat, paraBirim, DURUM_BADGE } from "./utils";
+
+const PLAN_BADGE: Record<PlanTuru, { etiket: string; cls: string }> = {
+  ucretsiz: { etiket: "Ücretsiz", cls: "bg-gray-100 text-gray-600" },
+  premium:  { etiket: "Premium",  cls: "bg-blue-100 text-blue-700" },
+  kurumsal: { etiket: "Kurumsal", cls: "bg-purple-100 text-purple-700" },
+};
 
 interface GelenTeklif {
   id: string;
@@ -25,6 +32,7 @@ interface ArsaSahibiPanelProps {
 export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
   const [ihaleler,       setIhaleler]       = useState<Ihale[]>([]);
   const [gelenTeklifler, setGelenTeklifler] = useState<GelenTeklif[]>([]);
+  const [planTuru,       setPlanTuru]       = useState<PlanTuru>("ucretsiz");
   const [yukleniyor,     setYukleniyor]     = useState(true);
   const [sekme,          setSekme]          = useState<Sekme>("ihaleler");
   const [siliniyor,      setSiliniyor]      = useState<string | null>(null);
@@ -33,6 +41,12 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
 
   useEffect(() => {
     async function yukle() {
+      const { data: profilData } = await supabase.from("kullanicilar")
+        .select("plan_turu")
+        .eq("id", userId)
+        .single();
+      setPlanTuru((profilData?.plan_turu as PlanTuru) ?? "ucretsiz");
+
       const { data: ihaleData } = await supabase.from("ihaleler").select("*")
         .eq("olusturan_id", userId)
         .order("created_at", { ascending: false });
@@ -105,6 +119,23 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
           </Link>
         </div>
       )}
+
+      {/* ─── Plan Bilgisi (yalnızca arsa sahibiyle ilgili) ─── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-5 py-4 mb-6 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${PLAN_BADGE[planTuru].cls}`}>
+            {PLAN_BADGE[planTuru].etiket}
+          </span>
+          <p className="text-sm text-gray-500">
+            İhalelerinizde en fazla <span className="font-semibold text-gray-900">{PLAN_MAKS_IHALE_GUNU[planTuru]} gün</span> süre tanımlayabilirsiniz
+          </p>
+        </div>
+        {planTuru !== "kurumsal" && (
+          <Link href="/premium" className="text-xs font-bold text-blue-700 hover:underline whitespace-nowrap">
+            Planı Yükselt →
+          </Link>
+        )}
+      </div>
 
       {/* ─── İstatistik Kartları ─── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
