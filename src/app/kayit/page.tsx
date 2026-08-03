@@ -10,7 +10,7 @@ import { GoogleIkon, AppleIkon, GozIkon, GozKapaliIkon } from "@/components/Sosy
 
 function ceviriHata(mesaj: string): string {
   if (mesaj.includes("User already registered") || mesaj.includes("already been registered"))
-    return "Bu e-posta adresi zaten kayıtlı. Giriş yapmayı deneyin.";
+    return "Bu e-posta adresi zaten kayıtlı, lütfen giriş yapın.";
   if (mesaj.includes("Password should be"))
     return "Şifre en az 6 karakter olmalıdır.";
   if (mesaj.includes("Invalid email"))
@@ -106,9 +106,24 @@ function KayitForm() {
     });
 
     if (error) {
-      console.error("Kayıt hatası:", error.message, error);
+      console.error("Kayıt hatası (tam obje):", error);
+      console.log("Kayıt hatası — error.message:", error.message, "| status:", error.status);
       setYukleniyor(false);
-      setHata(ceviriHata(error.message) + ` (${error.message})`);
+      const gercekMesaj = error.message && error.message.trim() && error.message !== "{}"
+        ? error.message
+        : `bilinmeyen hata${error.status ? ` — HTTP ${error.status}` : ""}`;
+      setHata(`${ceviriHata(error.message)} (${gercekMesaj})`);
+      return;
+    }
+
+    // Supabase, e-posta enumeration'ı önlemek için zaten kayıtlı ve
+    // onaylanmış bir e-postayla tekrar signUp çağrılırsa hata DÖNMEZ —
+    // bunun yerine identities dizisi boş gelir (data.session da null
+    // olur). Bu, kullanıcıya "kayıt başarılı, e-postanı onayla" gibi
+    // yanlış bir mesaj göstermemek için burada ayrıca kontrol edilir.
+    if (data.user && data.user.identities?.length === 0) {
+      setYukleniyor(false);
+      setHata("Bu e-posta adresi zaten kayıtlı, lütfen giriş yapın.");
       return;
     }
 

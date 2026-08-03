@@ -20,16 +20,53 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     console.log("[auth/callback] exchangeCodeForSession →", error ? `HATA: ${error.message}` : "OK");
     if (!error) {
-      // Google/Apple ile kayıt (signInWithOAuth) signUp() gibi custom
-      // metadata taşıyamaz; hesap_turu ve davet kodu buradan tamamlanır.
-      const hesapTuru = searchParams.get("hesap_turu");
-      const refKodu   = searchParams.get("ref");
-      if (hesapTuru || refKodu) {
-        await supabase.rpc("oauth_kayit_tamamla", {
-          p_hesap_turu: hesapTuru,
-          p_ref_kodu: refKodu,
-        });
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        // Google/Apple ile girişte public.kullanicilar'da profil satırı
+        // yoksa, handle_new_user tetikleyicisi bu e-postayı zaten başka
+        // bir hesaba kayıtlı bulup INSERT'i sessizce atlamıştır (bkz.
+        // supabase/google_oauth_fix.sql). Kullanıcıyı profilsiz bir
+        // oturumda bırakmak yerine oturumu kapatıp net bir mesajla
+        // giriş sayfasına yönlendiriyoruz.
+        const { data: profil } = await supabase
+          .from("kullanicilar")
+          .select("id")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!profil) {
+          let hesapZatenVar = false;
+          if (user.email) {
+            const { data: mevcutHesap } = await supabase
+              .from("kullanicilar")
+              .select("id")
+              .eq("email", user.email)
+              .maybeSingle();
+            hesapZatenVar = !!mevcutHesap;
+          }
+
+          await supabase.auth.signOut();
+
+          const mesaj = hesapZatenVar
+            ? "Bu e-posta adresi zaten kayıtlı, lütfen giriş yapın."
+            : "Hesap oluşturulamadı. Lütfen tekrar deneyin.";
+          const nextEk = next !== "/" ? `&next=${encodeURIComponent(next)}` : "";
+          return NextResponse.redirect(`${origin}/giris?hata=${encodeURIComponent(mesaj)}${nextEk}`);
+        }
+
+        // Google/Apple ile kayıt (signInWithOAuth) signUp() gibi custom
+        // metadata taşıyamaz; hesap_turu ve davet kodu buradan tamamlanır.
+        const hesapTuru = searchParams.get("hesap_turu");
+        const refKodu   = searchParams.get("ref");
+        if (hesapTuru || refKodu) {
+          await supabase.rpc("oauth_kayit_tamamla", {
+            p_hesap_turu: hesapTuru,
+            p_ref_kodu: refKodu,
+          });
+        }
       }
+
       return NextResponse.redirect(`${origin}${next}`);
     }
     return NextResponse.redirect(
