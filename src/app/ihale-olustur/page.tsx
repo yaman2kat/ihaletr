@@ -10,6 +10,34 @@ import type { PlanTuru } from "@/lib/types";
 
 const TASLAK_ANAHTARI = "ihale-olustur-taslak";
 
+type DosyaAlanAdi = "sartname" | "sozlesme" | "proje" | "tapu";
+type DosyalarState = Record<DosyaAlanAdi, File | null>;
+
+interface DosyaTaslak { ad: string; tip: string; veriUrl: string; }
+interface Taslak {
+  form: Record<string, string>;
+  otomatikSonlandirmaOnay: boolean;
+  dosyalar: Partial<Record<DosyaAlanAdi, DosyaTaslak>>;
+}
+
+// File nesnesi JSON'a çevrilemediği için localStorage'a base64 data URL olarak yazılır.
+function dosyaOku(dosya: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(dosya);
+  });
+}
+
+function dosyaGeriYukle(taslak: DosyaTaslak): File {
+  const base64 = taslak.veriUrl.split(",")[1] ?? "";
+  const ikili = atob(base64);
+  const bayt = new Uint8Array(ikili.length);
+  for (let i = 0; i < ikili.length; i++) bayt[i] = ikili.charCodeAt(i);
+  return new File([bayt], taslak.ad, { type: taslak.tip });
+}
+
 const KATEGORILER = ["Kentsel Dönüşüm", "Kat Karşılığı", "Yapı İnşaat", "Bakım & Onarım"];
 
 const ILLER = [
@@ -39,12 +67,7 @@ export default function IhaleOlustur() {
   const [eksikAlanlar, setEksikAlanlar] = useState<string[]>([]);
   const [otomatikSonlandirmaOnay, setOtomatikSonlandirmaOnay] = useState(false);
   const [adaParselBildirim, setAdaParselBildirim] = useState(false);
-  const [dosyalar, setDosyalar] = useState<{
-    sartname: File | null;
-    sozlesme: File | null;
-    proje: File | null;
-    tapu: File | null;
-  }>({ sartname: null, sozlesme: null, proje: null, tapu: null });
+  const [dosyalar, setDosyalar] = useState<DosyalarState>({ sartname: null, sozlesme: null, proje: null, tapu: null });
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState("");
   const taslakYuklendiRef = useRef(false);
@@ -62,19 +85,51 @@ export default function IhaleOlustur() {
     });
   }, []);
 
-  // Sayfa açılışında yarım kalan taslağı geri yükle (kayıt/giriş sonrası dönüşte de çalışır)
+  // Sayfa açılışında yarım kalan taslağı (metin alanları + dosyalar) geri
+  // yükle — kayıt/giriş sayfasına yönlendirilip geri dönüldüğünde de çalışır.
   useEffect(() => {
-    try {
-      const kayitli = sessionStorage.getItem(TASLAK_ANAHTARI);
-      if (kayitli) setForm(JSON.parse(kayitli));
-    } catch { /* noop */ }
-    taslakYuklendiRef.current = true;
+    async function yukle() {
+      try {
+        const kayitli = localStorage.getItem(TASLAK_ANAHTARI);
+        if (kayitli) {
+          const taslak: Taslak = JSON.parse(kayitli);
+          if (taslak.form) setForm((f) => ({ ...f, ...taslak.form }));
+          if (typeof taslak.otomatikSonlandirmaOnay === "boolean") {
+            setOtomatikSonlandirmaOnay(taslak.otomatikSonlandirmaOnay);
+          }
+          if (taslak.dosyalar) {
+            const yeniDosyalar: DosyalarState = { sartname: null, sozlesme: null, proje: null, tapu: null };
+            (Object.keys(yeniDosyalar) as DosyaAlanAdi[]).forEach((alan) => {
+              const dt = taslak.dosyalar[alan];
+              if (dt) yeniDosyalar[alan] = dosyaGeriYukle(dt);
+            });
+            setDosyalar(yeniDosyalar);
+          }
+        }
+      } catch { /* noop */ }
+      taslakYuklendiRef.current = true;
+    }
+    yukle();
   }, []);
 
+  // Her değişiklikte taslağı (metin + dosyalar) localStorage'a kaydet.
   useEffect(() => {
     if (!taslakYuklendiRef.current) return;
-    try { sessionStorage.setItem(TASLAK_ANAHTARI, JSON.stringify(form)); } catch { /* noop */ }
-  }, [form]);
+    const zamanlayici = setTimeout(async () => {
+      try {
+        const dosyaTaslaklari: Partial<Record<DosyaAlanAdi, DosyaTaslak>> = {};
+        for (const alan of Object.keys(dosyalar) as DosyaAlanAdi[]) {
+          const dosya = dosyalar[alan];
+          if (dosya) {
+            dosyaTaslaklari[alan] = { ad: dosya.name, tip: dosya.type, veriUrl: await dosyaOku(dosya) };
+          }
+        }
+        const taslak: Taslak = { form, otomatikSonlandirmaOnay, dosyalar: dosyaTaslaklari };
+        localStorage.setItem(TASLAK_ANAHTARI, JSON.stringify(taslak));
+      } catch { /* noop — kota aşımı vb. */ }
+    }, 400);
+    return () => clearTimeout(zamanlayici);
+  }, [form, dosyalar, otomatikSonlandirmaOnay]);
 
   function dogrula(): string[] {
     const eksik: string[] = [];
@@ -106,13 +161,14 @@ export default function IhaleOlustur() {
 
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    // GEÇİCİ: İhale yayınlamak için giriş/kayıt zorunluluğu kaldırıldı.
-    // Tekrar zorunlu kılmak için aşağıdaki bloğun yorumunu kaldırın:
-    // if (!session?.user) {
-    //   router.push(`/kayit?next=${encodeURIComponent("/ihale-olustur")}`);
-    //   return;
-    // }
-    const kullaniciId = session?.user?.id ?? null;
+    if (!session?.user) {
+      // Doldurulan form (metinler + dosyalar) taslak olarak zaten
+      // localStorage'da tutuluyor; kayıt/giriş sonrası bu sayfaya
+      // dönüldüğünde otomatik geri yüklenir.
+      router.push(`/kayit?next=${encodeURIComponent("/ihale-olustur")}`);
+      return;
+    }
+    const kullaniciId = session.user.id;
 
     const eksik = dogrula();
     if (eksik.length > 0) {
@@ -213,7 +269,7 @@ export default function IhaleOlustur() {
     ]);
 
     setYukleniyor(false);
-    try { sessionStorage.removeItem(TASLAK_ANAHTARI); } catch { /* noop */ }
+    try { localStorage.removeItem(TASLAK_ANAHTARI); } catch { /* noop */ }
     router.push("/ihaleler");
     router.refresh();
   }
