@@ -18,10 +18,35 @@ const MULKIYET_ETIKET: Record<string, string> = {
   sirket:    "Şirket",
 };
 
+// Bir ihalenin admin onayında ne kadar suredir bekledigini bu esikten
+// (saat) sonra gorsel olarak vurguluyoruz.
+const GECIKME_ESIGI_SAAT = 48;
+
 type Filtre = "beklemede" | "onaylandi" | "reddedildi" | "tumu";
 
 function tarihFormat(iso: string) {
   return new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
+}
+
+function tarihSaatFormat(iso: string) {
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+function bekleyenSure(iso: string): { metin: string; saat: number } {
+  const farkMs = Math.max(0, Date.now() - new Date(iso).getTime());
+  const toplamDakika = Math.floor(farkMs / 60000);
+  const gun    = Math.floor(toplamDakika / (60 * 24));
+  const saat   = Math.floor((toplamDakika % (60 * 24)) / 60);
+  const dakika = toplamDakika % 60;
+
+  let metin: string;
+  if (gun > 0)       metin = `${gun} gün ${saat} saat önce`;
+  else if (saat > 0)  metin = `${saat} saat ${dakika} dk önce`;
+  else                metin = `${dakika} dk önce`;
+
+  return { metin, saat: farkMs / 3600000 };
 }
 
 export default function AdminIhaleler() {
@@ -29,6 +54,7 @@ export default function AdminIhaleler() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [yetkisiz,  setYetkisiz]  = useState(false);
   const [filtre,    setFiltre]    = useState<Filtre>("beklemede");
+  const [, setSaat] = useState(0); // "bekleme suresi" metnini canli tutmak icin periyodik yeniden render
 
   useEffect(() => {
     async function yukle() {
@@ -53,7 +79,14 @@ export default function AdminIhaleler() {
     yukle();
   }, []);
 
+  // "X gün Y saat önce" metinlerinin canli kalmasi icin dakikada bir yeniden render.
+  useEffect(() => {
+    const zamanlayici = setInterval(() => setSaat((s) => s + 1), 60_000);
+    return () => clearInterval(zamanlayici);
+  }, []);
+
   const filtreliListe = ihaleler.filter((i) => filtre === "tumu" || (i.inceleme_durumu ?? "beklemede") === filtre);
+  const bekleyenSayisi = ihaleler.filter((i) => (i.inceleme_durumu ?? "beklemede") === "beklemede").length;
 
   if (yetkisiz) {
     return (
@@ -74,7 +107,7 @@ export default function AdminIhaleler() {
 
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
         {([
-          ["beklemede", "İnceleniyor"],
+          ["beklemede", `Onay Bekleyenler${bekleyenSayisi > 0 ? ` (${bekleyenSayisi})` : ""}`],
           ["onaylandi", "Onaylı"],
           ["reddedildi", "Reddedildi"],
           ["tumu", "Tümü"],
@@ -98,7 +131,63 @@ export default function AdminIhaleler() {
         <div className="text-center py-20 text-gray-400">
           <p className="text-lg font-medium">Bu filtrede ihale yok</p>
         </div>
+      ) : filtre === "beklemede" ? (
+        /* ─── Onay Bekleyenler: bekleme suresi odakli kart gorunumu ─── */
+        <div className="flex flex-col gap-3">
+          {filtreliListe.map((ihale) => {
+            const { metin, saat } = bekleyenSure(ihale.created_at);
+            const gecikmis = saat > GECIKME_ESIGI_SAAT;
+            return (
+              <div
+                key={ihale.id}
+                className={`bg-white rounded-2xl border shadow-sm p-5 transition-all ${
+                  gecikmis ? "border-red-300 bg-red-50/40" : "border-gray-200"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <Link
+                        href={`/admin/ihaleler/${ihale.id}`}
+                        className="font-semibold text-gray-900 hover:text-blue-700 transition-colors"
+                      >
+                        {ihale.baslik}
+                      </Link>
+                      {ihale.mulkiyet_durumu && (
+                        <span className="bg-blue-50 text-blue-700 text-[11px] px-2 py-0.5 rounded-full font-medium">
+                          {MULKIYET_ETIKET[ihale.mulkiyet_durumu] ?? ihale.mulkiyet_durumu}
+                        </span>
+                      )}
+                      {gecikmis && (
+                        <span className="bg-red-100 text-red-700 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                          ⚠ {GECIKME_ESIGI_SAAT} saati geçti
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {ihale.kurum} · Başvuru sahibi: {ihale.basvuru_sahibi_adi ?? "—"}
+                    </p>
+                  </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs text-gray-400 mb-0.5">{tarihSaatFormat(ihale.created_at)}</p>
+                    <p className={`text-sm font-bold ${gecikmis ? "text-red-600" : "text-gray-700"}`}>
+                      {metin}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end">
+                  <Link href={`/admin/ihaleler/${ihale.id}`} className="text-blue-600 hover:underline text-xs font-medium">
+                    İncele →
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* ─── Diğer sekmeler: standart tablo ─── */
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead>
