@@ -40,6 +40,7 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
   const [yukleniyor,  setYukleniyor]  = useState(false);
   const [hata,        setHata]        = useState("");
   const [basarili,    setBasarili]    = useState(false);
+  const [gonderilenTutar, setGonderilenTutar] = useState(0);
 
   useEffect(() => {
     const supabase = createClient();
@@ -107,6 +108,7 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
       setKalanHak((h) => Math.max(0, (h ?? 1) - 1));
     }
 
+    setGonderilenTutar(tutarNum);
     setBasarili(true);
     setTutar("");
   }
@@ -185,7 +187,7 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     return (
       <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-3 text-center">
         <p className="text-green-700 font-semibold text-sm">Teklifiniz alındı!</p>
-        <p className="text-green-600 text-xs mt-1">{formatPara(Number(tutar || 0))} tutarında teklif gönderildi.</p>
+        <p className="text-green-600 text-xs mt-1">{formatPara(gonderilenTutar)} tutarında teklif gönderildi.</p>
         {kalanHak !== null && kalanHak < SINIRSIN_ESIK && (
           <p className="text-xs text-gray-400 mt-2">Kalan hak: {kalanHak}</p>
         )}

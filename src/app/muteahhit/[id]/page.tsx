@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { mockMuteahhitler, mockReferansProjeler, mockMuteahhitYorumlar } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/server";
 import YorumBolumu from "./YorumBolumu";
-import type { InsaatTuru } from "@/lib/types";
+import type { InsaatTuru, MuteahhitProfil as MuteahhitProfilTipi, ReferansProje, MuteahhitYorum } from "@/lib/types";
 import { YETKI_BELGESI_ACIKLAMA } from "@/lib/muteahhit-yetki-belgesi";
 
 export async function generateStaticParams() {
@@ -40,11 +41,29 @@ function YildizSatiri({ puan, adet }: { puan: number; adet: number }) {
 export default async function MuteahhitProfil({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const profil = mockMuteahhitler.find((m) => m.id === id);
+  // Once gercek veritabanindaki profili dene (kullanici_id = id); yoksa
+  // demo/mock veriye dus (mockMuteahhitler "m1","m2"... gibi id'ler kullanir).
+  const supabase = await createClient();
+  const { data: dbProfil } = await supabase
+    .from("muteahhit_profiller")
+    .select("*")
+    .eq("kullanici_id", id)
+    .maybeSingle();
+
+  const profil: MuteahhitProfilTipi | (typeof mockMuteahhitler)[number] | undefined =
+    dbProfil ? (dbProfil as MuteahhitProfilTipi) : mockMuteahhitler.find((m) => m.id === id);
   if (!profil) notFound();
 
-  const projeler = mockReferansProjeler.filter((p) => p.muteahhit_id === id);
-  const yorumlar = mockMuteahhitYorumlar.filter((y) => y.muteahhit_id === id);
+  let projeler: ReferansProje[] = mockReferansProjeler.filter((p) => p.muteahhit_id === id);
+  let yorumlar: MuteahhitYorum[] = mockMuteahhitYorumlar.filter((y) => y.muteahhit_id === id);
+  if (dbProfil) {
+    const [{ data: dbProjeler }, { data: dbYorumlar }] = await Promise.all([
+      supabase.from("muteahhit_referans_projeler").select("*").eq("muteahhit_id", id).order("yil", { ascending: false }),
+      supabase.from("muteahhit_yorumlar").select("*").eq("muteahhit_id", id),
+    ]);
+    projeler = (dbProjeler ?? []) as ReferansProje[];
+    yorumlar = (dbYorumlar ?? []) as MuteahhitYorum[];
+  }
   const ortalamaHam = yorumlar.length
     ? yorumlar.reduce((s, y) => s + y.puan, 0) / yorumlar.length
     : 0;

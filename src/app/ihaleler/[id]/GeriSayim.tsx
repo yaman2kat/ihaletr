@@ -34,12 +34,21 @@ const birimler = [
 ] as const;
 
 export default function GeriSayim({ bitisTarihi }: Props) {
-  const [sure, setSure] = useState<Sure>(() => hesapla(bitisTarihi));
+  // Sure ilk render'da hesaplanmiyor: Date.now() sunucuda ve client
+  // hydration'inda farkli anlarda calisip hydration mismatch'ine yol
+  // aciyordu. Bunun yerine ilk deger useEffect icinde (yalnizca
+  // client'ta, mount sonrasi) hesaplaniyor.
+  const [sure, setSure] = useState<Sure | null>(null);
 
   useEffect(() => {
+    setSure(hesapla(bitisTarihi));
     const interval = setInterval(() => setSure(hesapla(bitisTarihi)), 1000);
     return () => clearInterval(interval);
   }, [bitisTarihi]);
+
+  if (!sure) {
+    return <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 h-[104px] animate-pulse" />;
+  }
 
   if (sure.bitti) {
     return (

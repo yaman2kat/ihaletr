@@ -246,7 +246,7 @@ CREATE POLICY "Giris yapan ya da misafir teklif verebilir"
     (
       auth.uid() IS NOT NULL
       AND auth.uid() = kullanici_id
-      AND auth.uid() != (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
+      AND auth.uid() IS DISTINCT FROM (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
     )
     OR (
       auth.uid() IS NULL

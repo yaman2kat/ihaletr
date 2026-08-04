@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { mockIhaleler, mockIhaleTeklifleri } from "@/lib/mock-data";
+import { mockIhaleler, mockIhaleTeklifleri, type MockTeklif } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/server";
+import type { Ihale } from "@/lib/types";
 import GeriSayim from "./GeriSayim";
 import SonTeklifler from "./SonTeklifler";
 import TeklifKutusu from "./TeklifKutusu";
@@ -41,10 +43,32 @@ export async function generateStaticParams() {
 
 export default async function IhaleDetay({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const ihale = mockIhaleler.find((i) => i.id === id);
+
+  // Once gercek veritabanindaki ihaleyi dene; bulunamazsa demo/mock
+  // veriye dus (mockIhaleler sabit "1","2"... gibi id'ler kullanir).
+  const supabase = await createClient();
+  const { data: dbIhale } = await supabase.from("ihaleler").select("*").eq("id", id).maybeSingle();
+
+  const ihale: Ihale | undefined = dbIhale ? (dbIhale as Ihale) : mockIhaleler.find((i) => i.id === id);
   if (!ihale) notFound();
 
-  const teklifler = mockIhaleTeklifleri[id] ?? [];
+  let teklifler: MockTeklif[] = mockIhaleTeklifleri[id] ?? [];
+  if (dbIhale) {
+    const { data: dbTeklifler } = await supabase
+      .from("teklifler")
+      .select("kullanici_id, tutar, created_at, kullanicilar(ad_soyad, firma_adi)")
+      .eq("ihale_id", id)
+      .order("tutar", { ascending: true });
+    teklifler = (dbTeklifler ?? []).map((t) => {
+      const kullanici = Array.isArray(t.kullanicilar) ? t.kullanicilar[0] : t.kullanicilar;
+      return {
+        kullanici_adi: kullanici?.firma_adi || kullanici?.ad_soyad || "Kullanıcı",
+        tarih: t.created_at,
+        tutar: t.tutar,
+        kullanici_id: t.kullanici_id,
+      };
+    });
+  }
   const kalanGun = Math.ceil(
     (new Date(ihale.bitis_tarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
