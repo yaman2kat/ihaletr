@@ -677,6 +677,7 @@ export default function IhaleOlustur() {
                   zorunlu
                   dosya={dosyalar.proje}
                   onChange={(f) => setDosyalar((d) => ({ ...d, proje: f }))}
+                  maksBoyutMB={40}
                 />
               )}
               <div>

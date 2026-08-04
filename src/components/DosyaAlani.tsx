@@ -8,7 +8,7 @@ interface Props {
   zorunlu?: boolean;
   dosya: File | null;
   onChange: (dosya: File | null) => void;
-  /** MB cinsinden üst sınır; verilmezse dosya uzantısına göre otomatik seçilir (görsel: 5 MB, diğer: 10 MB). */
+  /** MB cinsinden üst sınır; verilmezse dosya uzantısına göre otomatik seçilir (görsel/genel belge: 15 MB, çizim (.dwg): 40 MB). */
   maksBoyutMB?: number;
 }
 
@@ -30,16 +30,17 @@ function dosyaGecerli(dosya: File, kabul: string): boolean {
   return kabul.split(",").map((k) => k.trim().toLowerCase()).includes(uzanti);
 }
 
-const GORSEL_UZANTILARI = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
-const VARSAYILAN_GORSEL_MB = 5;
-const VARSAYILAN_DIGER_MB = 10;
+const CIZIM_UZANTILARI = [".dwg"];
+const VARSAYILAN_MB = 15;       // görseller + genel PDF belgeler (tapu, vekaletname, imza sirküleri vb.)
+const VARSAYILAN_CIZIM_MB = 40; // mimari çizim / teknik proje dosyaları (.dwg)
 
-// Görsel dosyalar için 5 MB, diğerleri (PDF, DWG vb.) için 10 MB varsayılan
-// üst sınır — `maksBoyutMB` prop'uyla instance başına ezilebilir.
+// `maksBoyutMB` prop'uyla instance başına ezilebilir — ör. "Bina Projesi"
+// alanı .pdf uzantısında olsa bile teknik proje sayıldığı için 40 MB'a
+// sabitlenir (bkz. ihale-olustur/page.tsx).
 function maksBoyutMBBul(dosyaAdi: string, override?: number): number {
   if (override) return override;
   const uzanti = "." + dosyaAdi.split(".").pop()?.toLowerCase();
-  return GORSEL_UZANTILARI.includes(uzanti) ? VARSAYILAN_GORSEL_MB : VARSAYILAN_DIGER_MB;
+  return CIZIM_UZANTILARI.includes(uzanti) ? VARSAYILAN_CIZIM_MB : VARSAYILAN_MB;
 }
 
 export default function DosyaAlani({ label, kabul, zorunlu = false, dosya, onChange, maksBoyutMB }: Props) {
