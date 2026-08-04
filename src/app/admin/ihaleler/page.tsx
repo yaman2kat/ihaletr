@@ -24,6 +24,8 @@ const GECIKME_ESIGI_SAAT = 48;
 
 type Filtre = "beklemede" | "onaylandi" | "reddedildi" | "tumu";
 
+const SAYFA_BOYUTU = 20;
+
 function tarihFormat(iso: string) {
   return new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
 }
@@ -51,13 +53,18 @@ function bekleyenSure(iso: string): { metin: string; saat: number } {
 
 export default function AdminIhaleler() {
   const [ihaleler,  setIhaleler]  = useState<Ihale[]>([]);
+  const [toplamSayi, setToplamSayi] = useState(0);
+  const [bekleyenSayisi, setBekleyenSayisi] = useState(0);
+  const [sayfa,     setSayfa]     = useState(1);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [yetkisiz,  setYetkisiz]  = useState(false);
+  const [adminDogrulandi, setAdminDogrulandi] = useState(false);
   const [filtre,    setFiltre]    = useState<Filtre>("beklemede");
   const [, setSaat] = useState(0); // "bekleme suresi" metnini canli tutmak icin periyodik yeniden render
 
+  // Admin yetkisi bir kez dogrulanir.
   useEffect(() => {
-    async function yukle() {
+    async function dogrula() {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) { setYetkisiz(true); setYukleniyor(false); return; }
@@ -69,15 +76,41 @@ export default function AdminIhaleler() {
         .single();
       if (profil?.rol !== "admin") { setYetkisiz(true); setYukleniyor(false); return; }
 
-      const { data } = await supabase
+      const { count } = await supabase
         .from("ihaleler")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select("*", { count: "exact", head: true })
+        .eq("inceleme_durumu", "beklemede");
+      setBekleyenSayisi(count ?? 0);
+
+      setAdminDogrulandi(true);
+    }
+    dogrula();
+  }, []);
+
+  // Filtre veya sayfa degistiginde ilgili sayfayi DB'den ceker (tum tablo
+  // tek seferde limitsiz cekilmez).
+  useEffect(() => {
+    if (!adminDogrulandi) return;
+    async function yukle() {
+      setYukleniyor(true);
+      const supabase = createClient();
+      let sorgu = supabase.from("ihaleler").select("*", { count: "exact" }).order("created_at", { ascending: false });
+      if (filtre !== "tumu") sorgu = sorgu.eq("inceleme_durumu", filtre);
+
+      const from = (sayfa - 1) * SAYFA_BOYUTU;
+      const to = from + SAYFA_BOYUTU - 1;
+      const { data, count } = await sorgu.range(from, to);
       setIhaleler((data ?? []) as Ihale[]);
+      setToplamSayi(count ?? 0);
       setYukleniyor(false);
     }
     yukle();
-  }, []);
+  }, [adminDogrulandi, filtre, sayfa]);
+
+  function filtreDegistir(f: Filtre) {
+    setFiltre(f);
+    setSayfa(1);
+  }
 
   // "X gün Y saat önce" metinlerinin canli kalmasi icin dakikada bir yeniden render.
   useEffect(() => {
@@ -85,8 +118,8 @@ export default function AdminIhaleler() {
     return () => clearInterval(zamanlayici);
   }, []);
 
-  const filtreliListe = ihaleler.filter((i) => filtre === "tumu" || (i.inceleme_durumu ?? "beklemede") === filtre);
-  const bekleyenSayisi = ihaleler.filter((i) => (i.inceleme_durumu ?? "beklemede") === "beklemede").length;
+  const filtreliListe = ihaleler;
+  const toplamSayfa = Math.max(1, Math.ceil(toplamSayi / SAYFA_BOYUTU));
 
   if (yetkisiz) {
     return (
@@ -112,7 +145,7 @@ export default function AdminIhaleler() {
           ["reddedildi", "Reddedildi"],
           ["tumu", "Tümü"],
         ] as [Filtre, string][]).map(([k, e]) => (
-          <button key={k} onClick={() => setFiltre(k)}
+          <button key={k} onClick={() => filtreDegistir(k)}
             className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
               filtre === k ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}>
@@ -233,6 +266,30 @@ export default function AdminIhaleler() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!yukleniyor && toplamSayfa > 1 && (
+        <div className="flex items-center justify-between mt-6">
+          <p className="text-xs text-gray-400">
+            Sayfa {sayfa} / {toplamSayfa} — toplam {toplamSayi} ihale
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSayfa((s) => Math.max(1, s - 1))}
+              disabled={sayfa <= 1}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              ← Önceki
+            </button>
+            <button
+              onClick={() => setSayfa((s) => Math.min(toplamSayfa, s + 1))}
+              disabled={sayfa >= toplamSayfa}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Sonraki →
+            </button>
+          </div>
         </div>
       )}
     </div>

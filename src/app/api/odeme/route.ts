@@ -88,16 +88,14 @@ export async function POST(req: NextRequest) {
           .update({ kalan_teklif_hakki: 99999 })
           .eq("id", kullaniciId);
       } else {
-        // Mevcut hakkı artır (race-safe: Supabase RPC ile)
-        const { data } = await db.from("kullanicilar")
-          .select("kalan_teklif_hakki")
-          .eq("id", kullaniciId)
-          .single();
-
-        const yeniHak = (data?.kalan_teklif_hakki ?? 0) + paketBilgi.teklif_hak;
-        await db.from("kullanicilar")
-          .update({ kalan_teklif_hakki: yeniHak })
-          .eq("id", kullaniciId);
+        // Mevcut hakkı artır — tek atomik RPC (artir_teklif_hakki), oku-hesapla-yaz
+        // yerine tek UPDATE ... SET kalan_teklif_hakki = kalan_teklif_hakki + N
+        // çalıştırır; eşzamanlı iki ödeme tamamlanması birbirinin yazdığını ezemez.
+        const { error: rpcError } = await db.rpc("artir_teklif_hakki", {
+          p_kullanici_id: kullaniciId,
+          p_miktar: paketBilgi.teklif_hak,
+        });
+        if (rpcError) console.error("Teklif hakkı artırma hatası:", rpcError);
       }
     }
 

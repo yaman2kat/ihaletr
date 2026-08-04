@@ -8,6 +8,8 @@ interface Props {
   zorunlu?: boolean;
   dosya: File | null;
   onChange: (dosya: File | null) => void;
+  /** MB cinsinden üst sınır; verilmezse dosya uzantısına göre otomatik seçilir (görsel: 5 MB, diğer: 10 MB). */
+  maksBoyutMB?: number;
 }
 
 function formatBoyut(bytes: number): string {
@@ -28,20 +30,42 @@ function dosyaGecerli(dosya: File, kabul: string): boolean {
   return kabul.split(",").map((k) => k.trim().toLowerCase()).includes(uzanti);
 }
 
-export default function DosyaAlani({ label, kabul, zorunlu = false, dosya, onChange }: Props) {
+const GORSEL_UZANTILARI = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+const VARSAYILAN_GORSEL_MB = 5;
+const VARSAYILAN_DIGER_MB = 10;
+
+// Görsel dosyalar için 5 MB, diğerleri (PDF, DWG vb.) için 10 MB varsayılan
+// üst sınır — `maksBoyutMB` prop'uyla instance başına ezilebilir.
+function maksBoyutMBBul(dosyaAdi: string, override?: number): number {
+  if (override) return override;
+  const uzanti = "." + dosyaAdi.split(".").pop()?.toLowerCase();
+  return GORSEL_UZANTILARI.includes(uzanti) ? VARSAYILAN_GORSEL_MB : VARSAYILAN_DIGER_MB;
+}
+
+export default function DosyaAlani({ label, kabul, zorunlu = false, dosya, onChange, maksBoyutMB }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [surukleniyor, setSurukleniyor] = useState(false);
   const [hata, setHata] = useState("");
+
+  function dosyaKabulEdilebilirMi(file: File): boolean {
+    if (!dosyaGecerli(file, kabul)) {
+      setHata(`Desteklenen formatlar: ${uzantiEtiket(kabul)}`);
+      return false;
+    }
+    const limitMB = maksBoyutMBBul(file.name, maksBoyutMB);
+    if (file.size > limitMB * 1024 * 1024) {
+      setHata(`Dosya çok büyük (${formatBoyut(file.size)}). Maksimum: ${limitMB} MB.`);
+      return false;
+    }
+    return true;
+  }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setSurukleniyor(false);
     const file = e.dataTransfer.files[0];
     if (!file) return;
-    if (!dosyaGecerli(file, kabul)) {
-      setHata(`Desteklenen formatlar: ${uzantiEtiket(kabul)}`);
-      return;
-    }
+    if (!dosyaKabulEdilebilirMi(file)) return;
     setHata("");
     onChange(file);
   }
@@ -49,6 +73,7 @@ export default function DosyaAlani({ label, kabul, zorunlu = false, dosya, onCha
   function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!dosyaKabulEdilebilirMi(file)) { e.target.value = ""; return; }
     setHata("");
     onChange(file);
     // Input'u sıfırla ki aynı dosya tekrar seçilebilsin

@@ -1,7 +1,12 @@
+import Link from "next/link";
 import type { MockTeklif } from "@/lib/mock-data";
 
 interface Props {
   teklifler: MockTeklif[];
+  toplamSayi?: number;
+  ihaleId?: string;
+  sayfa?: number;
+  toplamSayfa?: number;
 }
 
 function formatTarihSaat(tarih: string): string {
@@ -10,7 +15,9 @@ function formatTarihSaat(tarih: string): string {
     + " " + d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
 }
 
-export default function SonTeklifler({ teklifler }: Props) {
+export default function SonTeklifler({ teklifler, toplamSayi, ihaleId, sayfa = 1, toplamSayfa = 1 }: Props) {
+  const gosterilenSayi = toplamSayi ?? teklifler.length;
+
   if (teklifler.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
@@ -35,7 +42,7 @@ export default function SonTeklifler({ teklifler }: Props) {
         </svg>
         Son Teklifler
         <span className="ml-auto text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-          {teklifler.length} teklif
+          {gosterilenSayi} teklif
         </span>
       </h2>
 
@@ -60,6 +67,32 @@ export default function SonTeklifler({ teklifler }: Props) {
           </div>
         ))}
       </div>
+
+      {ihaleId && toplamSayfa > 1 && (
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+          <p className="text-xs text-gray-400">Sayfa {sayfa} / {toplamSayfa}</p>
+          <div className="flex gap-2">
+            <Link
+              href={`/ihaleler/${ihaleId}?teklifSayfa=${Math.max(1, sayfa - 1)}`}
+              aria-disabled={sayfa <= 1}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors ${
+                sayfa <= 1 ? "pointer-events-none opacity-40" : ""
+              }`}
+            >
+              ← Önceki
+            </Link>
+            <Link
+              href={`/ihaleler/${ihaleId}?teklifSayfa=${Math.min(toplamSayfa, sayfa + 1)}`}
+              aria-disabled={sayfa >= toplamSayfa}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors ${
+                sayfa >= toplamSayfa ? "pointer-events-none opacity-40" : ""
+              }`}
+            >
+              Sonraki →
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

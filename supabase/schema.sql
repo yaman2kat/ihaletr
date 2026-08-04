@@ -177,6 +177,7 @@ CREATE INDEX idx_ihaleler_kategori ON public.ihaleler(kategori);
 CREATE INDEX idx_ihaleler_sehir    ON public.ihaleler(sehir);
 CREATE INDEX idx_ihaleler_bitis    ON public.ihaleler(bitis_tarihi);
 CREATE INDEX idx_ihaleler_inceleme_durumu ON public.ihaleler(inceleme_durumu);
+CREATE INDEX idx_ihaleler_olusturan ON public.ihaleler(olusturan_id);
 
 ALTER TABLE public.ihaleler ENABLE ROW LEVEL SECURITY;
 
@@ -242,6 +243,30 @@ CREATE POLICY "Giris yapan teklif verebilir"
 
 CREATE POLICY "Teklif sahibi teklifini silebilir"
   ON public.teklifler FOR DELETE USING (auth.uid() = kullanici_id);
+
+-- Teklif hakki bitmis kullanici INSERT deneseydi bile DB seviyesinde reddedilsin
+-- (istemci tarafi kontrolu yalnizca kullanici deneyimi icindir, guvenlik siniri degil)
+CREATE OR REPLACE FUNCTION public.teklif_hakki_kontrol()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  mevcut_hak integer;
+BEGIN
+  SELECT kalan_teklif_hakki INTO mevcut_hak
+  FROM public.kullanicilar
+  WHERE id = NEW.kullanici_id;
+
+  IF mevcut_hak IS NULL OR mevcut_hak <= 0 THEN
+    RAISE EXCEPTION 'TEKLIF_HAKKI_YETERSIZ: Teklif hakkiniz kalmadi.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_teklif_hakki_kontrol ON public.teklifler;
+CREATE TRIGGER trg_teklif_hakki_kontrol
+  BEFORE INSERT ON public.teklifler
+  FOR EACH ROW EXECUTE FUNCTION public.teklif_hakki_kontrol();
 
 -- Teklif eklenince ihaledeki mevcut_teklif'i otomatik güncelle
 CREATE OR REPLACE FUNCTION public.guncelle_mevcut_teklif()
@@ -465,6 +490,27 @@ $$;
 CREATE TRIGGER on_teklif_eklendi_hak_duslur
   AFTER INSERT ON public.teklifler
   FOR EACH ROW EXECUTE FUNCTION public.guncelle_kullanici_teklif_hakki();
+
+-- Odenen teklif paketi sonrasi kalan_teklif_hakki'i tek atomik UPDATE ile
+-- artirir (oku-hesapla-yaz yerine) — eszamanli iki odeme tamamlanmasi
+-- (webhook tekrari, cift tiklama vb.) birbirinin yazdigini ezemez.
+-- Yalnizca service_role (api/odeme/route.ts) cagirabilir.
+CREATE OR REPLACE FUNCTION public.artir_teklif_hakki(p_kullanici_id uuid, p_miktar integer)
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  yeni_hak integer;
+BEGIN
+  UPDATE public.kullanicilar
+  SET kalan_teklif_hakki = kalan_teklif_hakki + p_miktar
+  WHERE id = p_kullanici_id
+  RETURNING kalan_teklif_hakki INTO yeni_hak;
+
+  RETURN yeni_hak;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.artir_teklif_hakki(uuid, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.artir_teklif_hakki(uuid, integer) TO service_role;
 
 -- ------------------------------------------------------------
 -- 8. MÜTEAHHİT PROFİLLER

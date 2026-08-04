@@ -41,8 +41,17 @@ export async function generateStaticParams() {
   return mockIhaleler.map((ihale) => ({ id: ihale.id }));
 }
 
-export default async function IhaleDetay({ params }: { params: Promise<{ id: string }> }) {
+const TEKLIF_SAYFA_BOYUTU = 20;
+
+export default async function IhaleDetay({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ teklifSayfa?: string }>;
+}) {
   const { id } = await params;
+  const sp = await searchParams;
 
   // Once gercek veritabanindaki ihaleyi dene; bulunamazsa demo/mock
   // veriye dus (mockIhaleler sabit "1","2"... gibi id'ler kullanir).
@@ -52,15 +61,21 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
   const ihale: Ihale | undefined = dbIhale ? (dbIhale as Ihale) : mockIhaleler.find((i) => i.id === id);
   if (!ihale) notFound();
 
+  const kalanGun = Math.ceil(
+    (new Date(ihale.bitis_tarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
+  const aktifVeDevam = ihale.durum === "aktif" && kalanGun > 0;
+  // Süresi dolmuş ya da tamamlanmış ihaleler için sonuç raporu gösterilir.
+  const sonucGosterilsinMi = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
+
   let teklifler: MockTeklif[] = mockIhaleTeklifleri[id] ?? [];
-  if (dbIhale) {
-    const { data: dbTeklifler } = await supabase
-      .from("teklifler")
-      .select("kullanici_id, tutar, created_at, kullanicilar(ad_soyad, firma_adi)")
-      .eq("ihale_id", id)
-      .order("tutar", { ascending: true });
-    teklifler = (dbTeklifler ?? []).map((t) => {
-      const kullanici = Array.isArray(t.kullanicilar) ? t.kullanicilar[0] : t.kullanicilar;
+  let teklifSayisi = teklifler.length;
+  let teklifSayfa = 1;
+  let teklifToplamSayfa = 1;
+
+  function eslesenTeklifler(dbTeklifler: { kullanici_id: string; tutar: number; created_at: string; kullanicilar: unknown }[]): MockTeklif[] {
+    return dbTeklifler.map((t) => {
+      const kullanici = Array.isArray(t.kullanicilar) ? t.kullanicilar[0] : t.kullanicilar as { ad_soyad?: string; firma_adi?: string } | null;
       return {
         kullanici_adi: kullanici?.firma_adi || kullanici?.ad_soyad || "Kullanıcı",
         tarih: t.created_at,
@@ -69,12 +84,37 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
       };
     });
   }
-  const kalanGun = Math.ceil(
-    (new Date(ihale.bitis_tarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  );
-  const aktifVeDevam = ihale.durum === "aktif" && kalanGun > 0;
-  // Süresi dolmuş ya da tamamlanmış ihaleler için sonuç raporu gösterilir.
-  const sonucGosterilsinMi = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
+
+  if (dbIhale) {
+    if (sonucGosterilsinMi) {
+      // İhale sonuç raporu (sıralama, istatistikler) ve teklif-sahibi erişim
+      // kontrolü tüm teklifleri gerektirir; bu, yalnızca bitmiş ihalelerde
+      // çalışan, sınırlı sayıda ziyaretin olduğu bir yoldur.
+      const { data: dbTeklifler, count } = await supabase
+        .from("teklifler")
+        .select("kullanici_id, tutar, created_at, kullanicilar(ad_soyad, firma_adi)", { count: "exact" })
+        .eq("ihale_id", id)
+        .order("tutar", { ascending: true });
+      teklifler = eslesenTeklifler(dbTeklifler ?? []);
+      teklifSayisi = count ?? teklifler.length;
+    } else {
+      // İhale devam ederken "Son Teklifler" widget'ı sayfalanır — çok
+      // teklif alan aktif bir ihalede her sayfa görüntülemesinde tüm
+      // teklifleri limitsiz çekmemek için.
+      teklifSayfa = Math.max(1, Number(sp?.teklifSayfa) || 1);
+      const from = (teklifSayfa - 1) * TEKLIF_SAYFA_BOYUTU;
+      const to = from + TEKLIF_SAYFA_BOYUTU - 1;
+      const { data: dbTeklifler, count } = await supabase
+        .from("teklifler")
+        .select("kullanici_id, tutar, created_at, kullanicilar(ad_soyad, firma_adi)", { count: "exact" })
+        .eq("ihale_id", id)
+        .order("tutar", { ascending: true })
+        .range(from, to);
+      teklifler = eslesenTeklifler(dbTeklifler ?? []);
+      teklifSayisi = count ?? 0;
+      teklifToplamSayfa = Math.max(1, Math.ceil(teklifSayisi / TEKLIF_SAYFA_BOYUTU));
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -137,7 +177,7 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
                 <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span><strong className="text-gray-800">{teklifler.length}</strong> teklif</span>
+                <span><strong className="text-gray-800">{teklifSayisi}</strong> teklif</span>
               </div>
             </div>
           </div>
@@ -231,7 +271,13 @@ export default async function IhaleDetay({ params }: { params: Promise<{ id: str
           <IhaleBelgeleri ihaleId={ihale.id} />
 
           {/* Son Teklifler */}
-          <SonTeklifler teklifler={teklifler} />
+          <SonTeklifler
+            teklifler={teklifler}
+            toplamSayi={teklifSayisi}
+            ihaleId={ihale.id}
+            sayfa={teklifSayfa}
+            toplamSayfa={teklifToplamSayfa}
+          />
 
         </div>
 
