@@ -146,8 +146,13 @@ CREATE TABLE public.ihaleler (
   kurum             text          NOT NULL,
   sehir             text          NOT NULL,
   ilce              text,
+  mahalle           text,
   ada_no            text,
   parsel_no         text,
+  yuzolcumu_m2         numeric,
+  yapi_insaat_ruhsati  text CHECK (yapi_insaat_ruhsati IS NULL OR yapi_insaat_ruhsati IN ('var', 'yok')),
+  proje                text CHECK (proje IS NULL OR proje IN ('var', 'yok')),
+  goruntulenme_sayisi  integer       NOT NULL DEFAULT 0,
   olusturan_id      uuid          REFERENCES public.kullanicilar(id) ON DELETE SET NULL,
   -- Taşınmaz mülkiyet doğrulama (admin incelemesi için)
   mulkiyet_durumu    mulkiyet_durumu_tipi,
