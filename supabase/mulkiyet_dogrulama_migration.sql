@@ -1,32 +1,44 @@
 -- ============================================================
--- IhaleTR - Tasinmaz mulkiyet dogrulama sistemi migration'i.
--- Bu dosyayi Supabase Dashboard > SQL Editor'e yapistirip calistirin.
--- Onceki tum migration'lar (schema.sql, davet_migration.sql,
--- hesap_turu_migration.sql) uygulanmis olmali.
--- Guvenli sekilde tekrar calistirilabilir (idempotent).
+-- IhaleTR - Tasinmaz mulkiyet dogrulama sistemi migration'i
+-- TEK DOSYA - tamamen idempotent, guvenle tekrar tekrar calistirilabilir.
+-- Bu dosyayi Supabase Dashboard > SQL Editor'e yapistirip calistirin (Run).
+-- ============================================================
+-- Her adim zaten uygulanmis olsa bile hata VERMEDEN atlanacak sekilde
+-- yazildi:
+--   - Enum TIPLERI  : CREATE TYPE ... EXCEPTION WHEN duplicate_object
+--   - Enum DEGERLERI: ALTER TYPE ... ADD VALUE IF NOT EXISTS (native)
+--   - Tablo sutunlari: ADD COLUMN IF NOT EXISTS (native)
+--   - Kisit/Policy  : onceden pg_constraint/pg_policies'te var mi
+--     kontrol edilip yoksa eklenir.
 -- ============================================================
 
--- 1) mulkiyet_durumu_tipi enum'u
+-- 1) mulkiyet_durumu_tipi ve inceleme_durumu enum TIPLERI
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'mulkiyet_durumu_tipi') THEN
-    CREATE TYPE mulkiyet_durumu_tipi AS ENUM ('tek_malik', 'hisseli', 'vekaleten', 'sirket');
-  END IF;
+  CREATE TYPE mulkiyet_durumu_tipi AS ENUM ('tek_malik', 'hisseli', 'vekaleten', 'sirket');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
 END $$;
 
--- 2) inceleme_durumu enum'u (admin onay/red durumu)
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'inceleme_durumu') THEN
-    CREATE TYPE inceleme_durumu AS ENUM ('beklemede', 'onaylandi', 'reddedildi');
-  END IF;
+  CREATE TYPE inceleme_durumu AS ENUM ('beklemede', 'onaylandi', 'reddedildi');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
 END $$;
 
--- 3) belge_turu enum'una yeni belge tipleri ekle
+-- 2) belge_turu enum'una gerekli DEGERLERI ekle ("tapu" dahil - canli
+-- ortamda bu deger de eksikti).
+ALTER TYPE belge_turu ADD VALUE IF NOT EXISTS 'tapu';
 ALTER TYPE belge_turu ADD VALUE IF NOT EXISTS 'vekaletname';
 ALTER TYPE belge_turu ADD VALUE IF NOT EXISTS 'imza_sirkuleri';
 
--- 4) ihaleler tablosuna yeni sutunlar
+-- Yukarida eklenen enum degerlerini asagida (ayni script icinde) hemen
+-- kullanabilmek icin transaction'i burada kapatiyoruz. Bu satir
+-- olmadan "unsafe use of new value" hatasi alinabilir.
+COMMIT;
+
+-- 3) ihaleler tablosuna eksik sutunlari ekle (var olanlar atlanir)
 ALTER TABLE public.ihaleler
   ADD COLUMN IF NOT EXISTS mulkiyet_durumu    mulkiyet_durumu_tipi,
   ADD COLUMN IF NOT EXISTS basvuru_sahibi_adi text,
@@ -37,7 +49,7 @@ ALTER TABLE public.ihaleler
 
 CREATE INDEX IF NOT EXISTS idx_ihaleler_inceleme_durumu ON public.ihaleler(inceleme_durumu);
 
--- Reddedilen bir ihalenin red sebebi bos birakilamaz.
+-- 4) Reddedilen bir ihalenin red sebebi bos birakilamaz (kisit yoksa eklenir)
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -52,8 +64,7 @@ BEGIN
 END $$;
 
 -- 5) RLS: admin, herhangi bir ihalenin inceleme_durumu/red_sebebi
--- alanlarini guncelleyebilsin (mevcut "sahibi guncelleyebilir" politikasina
--- ek permissive politika olarak eklenir, birbirini engellemez).
+-- alanlarini guncelleyebilsin (policy yoksa eklenir)
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -70,15 +81,22 @@ END $$;
 
 -- 6) RLS: belgeler tablosunda tapu ile ayni hassasiyette olan yeni
 -- belge turlerini (vekaletname, imza_sirkuleri) de admin-only yap.
+-- (DROP IF EXISTS + CREATE ile idempotent - eski/yeni ad farketmeksizin guvenli)
 DROP POLICY IF EXISTS "Tapu haricindeki belgeler herkese acik" ON public.belgeler;
+DROP POLICY IF EXISTS "Hassas belgeler sadece admin, digerleri herkese acik" ON public.belgeler;
 CREATE POLICY "Hassas belgeler sadece admin, digerleri herkese acik"
   ON public.belgeler FOR SELECT USING (
     tur NOT IN ('tapu', 'vekaletname', 'imza_sirkuleri')
     OR EXISTS (SELECT 1 FROM public.kullanicilar WHERE id = auth.uid() AND rol = 'admin')
   );
 
--- Not: vekaletname ve imza_sirkuleri dosyalari, tapu ile ayni ozel
--- (private) "ihale-tapu-belgeleri" storage bucket'ina yuklenir; bu
--- bucket'in storage.objects RLS politikalari (schema.sql, bolum 9)
--- zaten bucket_id bazli calistigi icin ek bir storage politikasi
--- gerekmez.
+-- ============================================================
+-- DOGRULAMA - script bittikten sonra asagidaki sorguyu ayrica
+-- calistirip sonucu paylasirsaniz her seyin dogru kuruldugunu
+-- teyit edebiliriz:
+--
+-- select column_name from information_schema.columns
+-- where table_schema='public' and table_name='ihaleler'
+--   and column_name in ('mulkiyet_durumu','basvuru_sahibi_adi',
+--     'sirket_unvani','yetkili_kisi_adi','inceleme_durumu','red_sebebi');
+-- ============================================================
