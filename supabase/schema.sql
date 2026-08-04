@@ -161,6 +161,7 @@ CREATE TABLE public.ihaleler (
   yetkili_kisi_adi   text,              -- yalnızca mulkiyet_durumu = 'sirket'
   inceleme_durumu    inceleme_durumu NOT NULL DEFAULT 'beklemede',
   red_sebebi         text,
+  otomatik_sonlandirildi boolean    NOT NULL DEFAULT false,
   created_at        timestamptz   NOT NULL DEFAULT now(),
   updated_at        timestamptz   NOT NULL DEFAULT now(),
 
@@ -212,9 +213,7 @@ CREATE POLICY "Olusturan ihalesini silebilir"
 CREATE TABLE public.teklifler (
   id            uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
   ihale_id      uuid          NOT NULL REFERENCES public.ihaleler(id) ON DELETE CASCADE,
-  -- GEÇİCİ: Misafir teklifleri için NOT NULL kaldırıldı. Eski hali:
-  -- kullanici_id  uuid          NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
-  kullanici_id  uuid          REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  kullanici_id  uuid          NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
   tutar         numeric(15,2) NOT NULL CHECK (tutar > 0),
   aciklama      text,
   durum         teklif_durumu NOT NULL DEFAULT 'beklemede',
@@ -234,24 +233,11 @@ CREATE POLICY "Ihale sahibi ve teklif sahibi teklifleri gorebilir"
     OR auth.uid() = (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
   );
 
--- GEÇİCİ: Giriş yapmadan da teklif verilebilsin diye misafir kullanıcılara izin verildi.
--- Eski (giriş zorunlu) hali:
--- CREATE POLICY "Giris yapan teklif verebilir"
---   ON public.teklifler FOR INSERT WITH CHECK (
---     auth.uid() = kullanici_id
---     AND auth.uid() != (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
---   );
-CREATE POLICY "Giris yapan ya da misafir teklif verebilir"
+CREATE POLICY "Giris yapan teklif verebilir"
   ON public.teklifler FOR INSERT WITH CHECK (
-    (
-      auth.uid() IS NOT NULL
-      AND auth.uid() = kullanici_id
-      AND auth.uid() IS DISTINCT FROM (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
-    )
-    OR (
-      auth.uid() IS NULL
-      AND kullanici_id IS NULL
-    )
+    auth.uid() IS NOT NULL
+    AND auth.uid() = kullanici_id
+    AND auth.uid() IS DISTINCT FROM (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
   );
 
 CREATE POLICY "Teklif sahibi teklifini silebilir"
@@ -898,3 +884,28 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- ------------------------------------------------------------
+-- 11. OTOMATİK İHALE SONLANDIRMA (pg_cron)
+-- Süresi dolduktan (bitis_tarihi) sonra 2 gün içinde sahibi tarafından
+-- bir karar (uzatma) verilmezse ihale otomatik olarak "tamamlandi"
+-- yapılır. pg_cron extension'ı Supabase Dashboard > Database >
+-- Extensions'tan aktif edilmelidir (bkz. supabase/otomatik_sonlandirma_migration.sql
+-- - fresh install'de bu script otomatik çalışmaz, extension'ın ayrıca
+-- etkinleştirilip zamanlanması gerekir).
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.ihale_otomatik_sonlandir()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  UPDATE public.ihaleler
+  SET durum = 'tamamlandi',
+      otomatik_sonlandirildi = true,
+      updated_at = now()
+  WHERE durum = 'aktif'
+    AND bitis_tarihi < (CURRENT_DATE - 2);
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.ihale_otomatik_sonlandir() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ihale_otomatik_sonlandir() TO service_role;

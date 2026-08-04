@@ -136,6 +136,7 @@ export interface Ihale {
   yetkili_kisi_adi?: string | null;
   inceleme_durumu?: IncelemeDurumu;
   red_sebebi?: string | null;
+  otomatik_sonlandirildi?: boolean;
   created_at: string;
 }
 

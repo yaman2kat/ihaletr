@@ -246,6 +246,11 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                               ⚠ {kalan} gün kaldı
                             </span>
                           )}
+                          {ihale.otomatik_sonlandirildi && (
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+                              Otomatik Sonlandırıldı
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex flex-wrap gap-4 text-xs text-gray-500">
@@ -321,6 +326,18 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                           <p className="text-xs font-semibold text-red-800 mb-0.5">İhaleniz reddedildi</p>
                           <p className="text-xs text-red-700">{ihale.red_sebebi}</p>
                         </div>
+                      </div>
+                    )}
+
+                    {ihale.otomatik_sonlandirildi && (
+                      <div className="mt-4 flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="text-xs text-gray-500">
+                          Bu ihale, süre dolduktan sonra 2 gün içinde bir karar (uzatma/sonlandırma) verilmediği için sistem tarafından otomatik olarak sonlandırılmıştır.
+                        </p>
                       </div>
                     )}
                   </div>

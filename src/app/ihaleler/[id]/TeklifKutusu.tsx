@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
@@ -33,6 +34,9 @@ function hakRenk(hak: number): string {
 }
 
 export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun }: Props) {
+  const router = useRouter();
+  const taslakAnahtari = `teklif-taslak-${ihaleId}`;
+
   const [kullanici,   setKullanici]   = useState<User | null | undefined>(undefined);
   const [kalanHak,    setKalanHak]    = useState<number | null>(null);
   const [hakYuklendi, setHakYuklendi] = useState(false);
@@ -70,12 +74,38 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     return () => subscription.unsubscribe();
   }, []);
 
+  // Kayıt/giriş sayfasına yönlendirilip geri dönüldüğünde girilen
+  // tutarın kaybolmaması için taslağı geri yükle.
+  useEffect(() => {
+    try {
+      const kayitli = localStorage.getItem(taslakAnahtari);
+      if (kayitli) setTutar(kayitli);
+    } catch { /* noop */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (tutar) localStorage.setItem(taslakAnahtari, tutar);
+      else localStorage.removeItem(taslakAnahtari);
+    } catch { /* noop */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tutar]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // GEÇİCİ: Teklif vermek için giriş zorunluluğu kaldırıldı.
-    // Tekrar zorunlu kılmak için: if (!kullanici || !tutar || kalanHak === null) return;
     if (!tutar) return;
-    if (kullanici && kalanHak !== null && kalanHak <= 0) { setHata("Teklif hakkınız kalmadı."); return; }
+
+    // Giriş yapılmamışsa: girilen tutar zaten localStorage'da taslak
+    // olarak tutuluyor, kayıt/giriş sonrası bu sayfaya dönüldüğünde
+    // otomatik geri yüklenir — kullanıcının tek yapması gereken
+    // "Teklif Ver"e tekrar basmak.
+    if (!kullanici) {
+      router.push(`/kayit?next=${encodeURIComponent(`/ihaleler/${ihaleId}`)}`);
+      return;
+    }
+
+    if (kalanHak !== null && kalanHak <= 0) { setHata("Teklif hakkınız kalmadı."); return; }
 
     const tutarNum = Number(tutar);
     if (tutarNum <= 0) { setHata("Geçerli bir tutar girin."); return; }
@@ -86,9 +116,7 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
 
     const { error } = await supabase.from("teklifler").insert({
       ihale_id:     ihaleId,
-      // GEÇİCİ: Girişsiz teklif verilebildiği için kullanici_id boş olabilir.
-      // Zorunlu girişe dönüldüğünde: kullanici_id: kullanici.id,
-      kullanici_id: kullanici?.id ?? null,
+      kullanici_id: kullanici.id,
       tutar:        tutarNum,
     });
 
@@ -104,10 +132,11 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     }
 
     // DB trigger kalan_teklif_hakki'ı otomatik düşürür; local state'i optimistik güncelle
-    if (kullanici && kalanHak !== null && kalanHak < SINIRSIN_ESIK) {
+    if (kalanHak !== null && kalanHak < SINIRSIN_ESIK) {
       setKalanHak((h) => Math.max(0, (h ?? 1) - 1));
     }
 
+    try { localStorage.removeItem(taslakAnahtari); } catch { /* noop */ }
     setGonderilenTutar(tutarNum);
     setBasarili(true);
     setTutar("");
@@ -136,27 +165,8 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     return <div className="h-12 bg-gray-100 rounded-lg animate-pulse mb-3" />;
   }
 
-  // GEÇİCİ: Teklif vermek için giriş zorunluluğu kaldırıldı.
-  // Tekrar zorunlu kılmak için aşağıdaki bloğun yorumunu kaldırın:
-  // if (kullanici === null) {
-  //   return (
-  //     <div className="mb-3">
-  //       <Link
-  //         href={`/giris?next=/ihaleler/${ihaleId}`}
-  //         className="block w-full text-center bg-blue-700 text-white font-semibold py-3 rounded-lg hover:bg-blue-800 transition-colors"
-  //       >
-  //         Teklif Vermek İçin Giriş Yap
-  //       </Link>
-  //       <p className="text-xs text-gray-400 text-center mt-2">
-  //         Hesabınız yok mu?{" "}
-  //         <Link href="/kayit" className="text-blue-600 hover:underline">Kayıt olun</Link>
-  //       </p>
-  //     </div>
-  //   );
-  // }
-
   // Teklif hakkı yok → paket satın al
-  if (kalanHak !== null && kalanHak <= 0) {
+  if (kullanici && kalanHak !== null && kalanHak <= 0) {
     return (
       <div className="mb-3">
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3 text-center">
@@ -195,17 +205,26 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     );
   }
 
-  // Teklif formu
+  // Teklif formu — girişsiz kullanıcı da tutarı doldurabilir; submit
+  // anında giriş yapılmamışsa kayıt/giriş sayfasına yönlendirilir
+  // (bkz. handleSubmit). Bu yüzden burada "kullanici === null" için
+  // ayrı bir görünüm YOK — form her zaman gösterilir.
   return (
     <form onSubmit={handleSubmit} className="mb-3">
       {/* Kalan hak */}
-      {kalanHak !== null && (
+      {kullanici && kalanHak !== null && (
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs text-gray-400">Teklif hakkı</span>
           <span className={`text-xs font-bold ${hakRenk(kalanHak)}`}>
             {hakEtiket(kalanHak)}
           </span>
         </div>
+      )}
+
+      {!kullanici && (
+        <p className="text-xs text-gray-500 mb-3">
+          Teklif vermek için giriş yapmanız gerekir — tutarı girip &quot;Teklif Ver&quot;e bastığınızda giriş/kayıt sayfasına yönlendirilirsiniz, girdiğiniz tutar kaybolmaz.
+        </p>
       )}
 
       {hata && (
@@ -226,7 +245,7 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
         type="submit" disabled={yukleniyor}
         className="block w-full text-center bg-blue-700 text-white font-semibold py-3 rounded-lg hover:bg-blue-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        {yukleniyor ? "Gönderiliyor..." : "Teklif Ver"}
+        {yukleniyor ? "Gönderiliyor..." : kullanici ? "Teklif Ver" : "Giriş Yap ve Teklif Ver"}
       </button>
 
       {kalanGun > 0 && (
