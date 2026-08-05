@@ -86,6 +86,7 @@ export default function IhaleOlustur() {
   });
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState("");
+  const [belgeUyarisi, setBelgeUyarisi] = useState<string[] | null>(null);
   const taslakYuklendiRef = useRef(false);
 
   useEffect(() => {
@@ -242,20 +243,20 @@ export default function IhaleOlustur() {
       dosya: File | null,
       tur: "proje" | "sozlesme" | "ruhsat" | "diger",
       baslik: string
-    ) => {
-      if (!dosya) return;
+    ): Promise<{ baslik: string; basarili: boolean } | null> => {
+      if (!dosya) return null;
       const yol = `${ihaleData.id}/${tur}-${Date.now()}-${dosya.name}`;
       const { data: storageData, error: storageError } = await supabase.storage
         .from("ihale-belgeleri")
         .upload(yol, dosya, { upsert: false });
 
-      if (storageError || !storageData) return;
+      if (storageError || !storageData) return { baslik, basarili: false };
 
       const { data: urlData } = supabase.storage
         .from("ihale-belgeleri")
         .getPublicUrl(yol);
 
-      await supabase.from("belgeler").insert({
+      const { error: belgeError } = await supabase.from("belgeler").insert({
         baslik,
         dosya_url:   urlData.publicUrl,
         dosya_tipi:  dosya.type,
@@ -264,6 +265,7 @@ export default function IhaleOlustur() {
         ihale_id:    ihaleData.id,
         yukleyen_id: kullaniciId,
       });
+      return { baslik, basarili: !belgeError };
     };
 
     // Tapu, vekaletname/hissedar onayı ve imza sirküleri: herkese kapalı
@@ -275,16 +277,16 @@ export default function IhaleOlustur() {
       tur: "tapu" | "vekaletname" | "imza_sirkuleri",
       baslik: string,
       dosyaAdiOnEki: string
-    ) => {
-      if (!dosya) return;
+    ): Promise<{ baslik: string; basarili: boolean } | null> => {
+      if (!dosya) return null;
       const yol = `${ihaleData.id}/${dosyaAdiOnEki}-${Date.now()}-${dosya.name}`;
       const { data: storageData, error: storageError } = await supabase.storage
         .from("ihale-tapu-belgeleri")
         .upload(yol, dosya, { upsert: false });
 
-      if (storageError || !storageData) return;
+      if (storageError || !storageData) return { baslik, basarili: false };
 
-      await supabase.from("belgeler").insert({
+      const { error: belgeError } = await supabase.from("belgeler").insert({
         baslik,
         dosya_url:   yol, // özel bucket içindeki yol — herkese açık URL değil
         dosya_tipi:  dosya.type,
@@ -293,9 +295,10 @@ export default function IhaleOlustur() {
         ihale_id:    ihaleData.id,
         yukleyen_id: kullaniciId,
       });
+      return { baslik, basarili: !belgeError };
     };
 
-    await Promise.allSettled([
+    const sonuclar = await Promise.allSettled([
       dosyaYukle(dosyalar.sartname, "proje",   "Yapı Şartnamesi"),
       dosyaYukle(dosyalar.sozlesme, "sozlesme", "Sözleşme Tasarısı"),
       dosyaYukle(dosyalar.proje,    "proje",    "Bina Projesi"),
@@ -304,8 +307,23 @@ export default function IhaleOlustur() {
       gizliBelgeYukle(dosyalar.imzaSirkuleri,"imza_sirkuleri", "İmza Sirküleri",                      "imza-sirkuleri"),
     ]);
 
+    const basarisizlar = sonuclar
+      .map((s) => (s.status === "fulfilled" ? s.value : { baslik: "Bilinmeyen belge", basarili: false }))
+      .filter((s): s is { baslik: string; basarili: boolean } => s !== null && !s.basarili)
+      .map((s) => s.baslik);
+
     setYukleniyor(false);
     try { localStorage.removeItem(TASLAK_ANAHTARI); } catch { /* noop */ }
+
+    if (basarisizlar.length > 0) {
+      // İhale oluşturuldu ama en az bir belge yüklenemedi (bağlantı kopması,
+      // depolama hatası vb.) — sessizce yönlendirmek yerine kullanıcıyı
+      // açıkça uyar, aksi halde belgesinin yüklendiğini sanıp panelden
+      // ayrılırdı.
+      setBelgeUyarisi(basarisizlar);
+      return;
+    }
+
     router.push("/ihaleler");
     router.refresh();
   }
@@ -338,6 +356,26 @@ export default function IhaleOlustur() {
             <a href="/premium" className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap underline">
               Premium'a Geç →
             </a>
+          </div>
+        )}
+
+        {belgeUyarisi && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg p-4 mb-6">
+            <p className="font-semibold mb-1">İhaleniz oluşturuldu ancak bazı belgeler yüklenemedi:</p>
+            <ul className="list-disc list-inside mb-3">
+              {belgeUyarisi.map((b) => <li key={b}>{b}</li>)}
+            </ul>
+            <p className="mb-3">
+              Bu durum genellikle bağlantı kopmasından kaynaklanır. Lütfen destek ekibimizle iletişime geçip
+              eksik belgeleri iletin, aksi halde admin incelemesi tamamlanamayabilir.
+            </p>
+            <button
+              type="button"
+              onClick={() => { router.push("/ihaleler"); router.refresh(); }}
+              className="bg-amber-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors text-sm"
+            >
+              Anladım, İhalelere Git
+            </button>
           </div>
         )}
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createSessionClient } from "@/lib/supabase/server";
 import { odemeOlustur } from "@/lib/iyzico";
 
 // Paket → fiyat ve Supabase güncelleme bilgisi
@@ -27,15 +28,24 @@ function supabaseAdmin() {
 
 export async function POST(req: NextRequest) {
   try {
+    // Oturum sunucu tarafinda dogrulanir; kullaniciId/email istemciden
+    // GELMEZ — aksi halde biri kendi kartiyla odeme yapip PAKETI BASKA
+    // BIR KULLANICIYA (rastgele bir uuid'e) yukleyebilirdi.
+    const sessionSupabase = await createSessionClient();
+    const { data: { user } } = await sessionSupabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ hata: "Oturum bulunamadı, lütfen giriş yapın." }, { status: 401 });
+    }
+    const kullaniciId = user.id;
+    const email = user.email!;
+
     const body = await req.json();
-    const { paket, kart, kullaniciId, email } = body as {
+    const { paket, kart } = body as {
       paket: string;
       kart: { kartSahibi: string; kartNo: string; sonAy: string; sonYil: string; cvv: string };
-      kullaniciId: string;
-      email: string;
     };
 
-    if (!paket || !kart || !kullaniciId || !email) {
+    if (!paket || !kart) {
       return NextResponse.json({ hata: "Eksik parametreler." }, { status: 400 });
     }
 

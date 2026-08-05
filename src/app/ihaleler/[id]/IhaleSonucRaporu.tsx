@@ -125,13 +125,23 @@ function UzatmaBolumu({
     setGonderiliyor(true);
     const yeniBitisTarihi = tarihiGunEkleyerekUzat(bitisTarihi, eklenecekGun);
     const supabase = createClient();
-    const { error } = await supabase
+    // .eq("durum", "aktif") ile eslesme kontrolu: ihale, siz bu formu
+    // doldururken pg_cron tarafindan zaten otomatik sonlandirilmis olabilir
+    // — bu durumda uzatma islemi sessizce tutarsiz bir duruma (tamamlandi +
+    // gelecekteki bir bitis_tarihi) yol acmadan reddedilir.
+    const { data, error } = await supabase
       .from("ihaleler")
       .update({ bitis_tarihi: yeniBitisTarihi })
-      .eq("id", ihaleId);
+      .eq("id", ihaleId)
+      .eq("durum", "aktif")
+      .select("id");
     setGonderiliyor(false);
 
     if (error) { setHata("İhale uzatılamadı: " + error.message); return; }
+    if (!data || data.length === 0) {
+      setHata("Bu ihale artık aktif değil — süresi dolup otomatik sonlandırılmış olabilir, uzatılamaz.");
+      return;
+    }
     setBasariliTarih(yeniBitisTarihi);
   }
 

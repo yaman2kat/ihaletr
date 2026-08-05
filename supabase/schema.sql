@@ -207,6 +207,53 @@ CREATE POLICY "Admin ihaleyi inceleyebilir"
 CREATE POLICY "Olusturan ihalesini silebilir"
   ON public.ihaleler FOR DELETE USING (auth.uid() = olusturan_id);
 
+-- Ihale sahibi kendi satirinin HER sutununu guncelleyebilir (yukaridaki
+-- USING politikasi satir bazlidir, sutun kisitlamaz) — bu, sahibin
+-- dogrudan PATCH ile inceleme_durumu'nu kendi kendine "onaylandi" yaparak
+-- admin mulkiyet incelemesini bypass edebilmesine izin verirdi. Bu
+-- trigger, admin/sistem disinda inceleme_durumu, red_sebebi ve
+-- otomatik_sonlandirildi alanlarinin degistirilmesini engeller.
+CREATE OR REPLACE FUNCTION public.ihale_kisitli_sutun_kontrol()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  admin_mi boolean;
+BEGIN
+  -- service_role / pg_cron baglaminda (auth.uid() NULL) serbest birak
+  IF auth.uid() IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT (rol = 'admin') INTO admin_mi FROM public.kullanicilar WHERE id = auth.uid();
+  IF admin_mi THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.inceleme_durumu IS DISTINCT FROM OLD.inceleme_durumu
+     OR NEW.red_sebebi IS DISTINCT FROM OLD.red_sebebi
+     OR NEW.otomatik_sonlandirildi IS DISTINCT FROM OLD.otomatik_sonlandirildi
+  THEN
+    RAISE EXCEPTION 'KISITLI_ALAN_DEGISTIRILEMEZ: Bu alanlar yalnizca admin/sistem tarafindan degistirilebilir.';
+  END IF;
+
+  -- Not: mevcut_teklif / goruntulenme_sayisi kasitli olarak bu kontrolun
+  -- disinda birakildi — teklif eklenince calisan guncelle_mevcut_teklif()
+  -- trigger'i bu alani BIDDER'IN kendi oturumuyla (ic ice/nested trigger
+  -- olarak) gunceller; pg_trigger_depth() ile "dogrudan PATCH" / "nested
+  -- trigger" ayrimi denendiginde bidding akisini kirdigi tespit edildi
+  -- (regresyon testiyle dogrulandi). mevcut_teklif zaten her yeni teklifte
+  -- yeniden hesaplandigindan (MIN(tutar)) manuel bir PATCH kalici bir
+  -- etki yaratamaz; risk dusuk kabul edilip bidding akisi bozulmadan
+  -- birakildi.
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_ihale_kisitli_sutun_kontrol ON public.ihaleler;
+CREATE TRIGGER trg_ihale_kisitli_sutun_kontrol
+  BEFORE UPDATE ON public.ihaleler
+  FOR EACH ROW EXECUTE FUNCTION public.ihale_kisitli_sutun_kontrol();
+
 -- ------------------------------------------------------------
 -- 3. TEKLİFLER
 -- ------------------------------------------------------------
@@ -220,7 +267,7 @@ CREATE TABLE public.teklifler (
   durum         teklif_durumu NOT NULL DEFAULT 'beklemede',
   created_at    timestamptz   NOT NULL DEFAULT now(),
 
-  UNIQUE (ihale_id, kullanici_id)  -- bir kullanıcı aynı ihaleyie tek teklif
+  UNIQUE (ihale_id, kullanici_id)  -- bir kullanıcı aynı ihaleye tek teklif
 );
 
 CREATE INDEX idx_teklifler_ihale     ON public.teklifler(ihale_id);
@@ -317,14 +364,24 @@ ALTER TABLE public.danishmanlar ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Herkes aktif danismanlari gorebilir"
   ON public.danishmanlar FOR SELECT USING (aktif = true);
 
-CREATE POLICY "Giris yapan kullanici danishman ekleyebilir"
-  ON public.danishmanlar FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+-- Not: "Yalnizca admin tarafindan eklenir" tasarim niyetine ragmen bu
+-- politikalar onceden herhangi bir giris yapmis kullaniciya acikti; admin
+-- kontrolu eklendi. (Danisman sayfalari ayri bir kararla pasif birakildi,
+-- bu sadece arka uctaki acik yetki deligini kapatir.)
+CREATE POLICY "Sadece admin danisman ekleyebilir"
+  ON public.danishmanlar FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM public.kullanicilar WHERE id = auth.uid() AND rol = 'admin')
+  );
 
-CREATE POLICY "Giris yapan kullanici danishman guncelleyebilir"
-  ON public.danishmanlar FOR UPDATE USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Sadece admin danisman guncelleyebilir"
+  ON public.danishmanlar FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM public.kullanicilar WHERE id = auth.uid() AND rol = 'admin')
+  );
 
-CREATE POLICY "Giris yapan kullanici danishman silebilir"
-  ON public.danishmanlar FOR DELETE USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Sadece admin danisman silebilir"
+  ON public.danishmanlar FOR DELETE USING (
+    EXISTS (SELECT 1 FROM public.kullanicilar WHERE id = auth.uid() AND rol = 'admin')
+  );
 
 -- ------------------------------------------------------------
 -- 5. BELGELER

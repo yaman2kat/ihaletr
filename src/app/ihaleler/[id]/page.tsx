@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { mockIhaleler, mockIhaleTeklifleri, type MockTeklif } from "@/lib/mock-data";
 import { createClient } from "@/lib/supabase/server";
@@ -39,6 +40,16 @@ const durumEtiket: Record<string, string> = {
 
 export async function generateStaticParams() {
   return mockIhaleler.map((ihale) => ({ id: ihale.id }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: dbIhale } = await supabase.from("ihaleler").select("baslik, sehir, ilce").eq("id", id).maybeSingle();
+  const ihale = dbIhale ?? mockIhaleler.find((i) => i.id === id);
+  if (!ihale) return { title: "İhale Bulunamadı - İhaleTR" };
+  const konum = "ilce" in ihale && ihale.ilce ? `${ihale.sehir} / ${ihale.ilce}` : ihale.sehir;
+  return { title: `${ihale.baslik} - ${konum} | İhaleTR` };
 }
 
 const TEKLIF_SAYFA_BOYUTU = 20;

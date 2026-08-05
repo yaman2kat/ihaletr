@@ -136,8 +136,6 @@ export default function OdemeSayfasi({ params }: { params: Promise<{ paket: stri
             sonYil,
             cvv,
           },
-          kullaniciId: kullanici!.id,
-          email:       kullanici!.email!,
         }),
       });
 

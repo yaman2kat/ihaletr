@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { mockMuteahhitler, mockReferansProjeler, mockMuteahhitYorumlar } from "@/lib/mock-data";
 import { createClient } from "@/lib/supabase/server";
@@ -8,6 +9,15 @@ import { YETKI_BELGESI_ACIKLAMA } from "@/lib/muteahhit-yetki-belgesi";
 
 export async function generateStaticParams() {
   return mockMuteahhitler.map((m) => ({ id: m.id }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: dbProfil } = await supabase.from("muteahhit_profiller").select("firma_adi").eq("kullanici_id", id).maybeSingle();
+  const profil = dbProfil ?? mockMuteahhitler.find((m) => m.id === id);
+  if (!profil) return { title: "Müteahhit Bulunamadı - İhaleTR" };
+  return { title: `${profil.firma_adi} - Müteahhit Profili | İhaleTR` };
 }
 
 const TUR_RENK: Record<InsaatTuru, string> = {

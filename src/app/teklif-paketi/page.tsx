@@ -21,7 +21,7 @@ const PAKETLER: Paket[] = [
     hakSayi: 5,
     fiyat: "299₺",
     fiyatAlt: "tek seferlik",
-    aciklama: "Birkaç ihaleyie teklif vermek isteyen bireysel kullanıcılar için.",
+    aciklama: "Birkaç ihaleye teklif vermek isteyen bireysel kullanıcılar için.",
     ozellikler: [
       "5 teklif hakkı (tek seferlik)",
       "Haklar süresiz geçerlidir",
@@ -212,7 +212,7 @@ export default function TeklifPaketiSayfasi() {
           {[
             {
               s: "Ücretsiz 2 teklif hakkı nasıl kullanılır?",
-              c: "Hesap oluştururken otomatik olarak 2 ücretsiz teklif hakkı tanınır. Bu haklar herhangi bir ihaleyie teklif verdiğinizde otomatik düşer.",
+              c: "Hesap oluştururken otomatik olarak 2 ücretsiz teklif hakkı tanınır. Bu haklar herhangi bir ihaleye teklif verdiğinizde otomatik düşer.",
             },
             {
               s: "Başlangıç veya Standart paketlerdeki haklar ne zaman sona erer?",

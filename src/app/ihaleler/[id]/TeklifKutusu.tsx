@@ -124,7 +124,7 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
 
     if (error) {
       if (error.code === "23505") {
-        setHata("Bu ihaleyie zaten teklif verdiniz.");
+        setHata("Bu ihaleye zaten teklif verdiniz.");
       } else if (error.message?.includes("TEKLIF_HAKKI_YETERSIZ")) {
         setHata("Teklif hakkınız kalmadı.");
         setKalanHak(0);
