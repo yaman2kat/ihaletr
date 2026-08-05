@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Ihale, Belge, IncelemeDurumu } from "@/lib/types";
+
+const HIZLI_RED_SEBEPLERI = [
+  "Dosya boyutu sınırı aşıldı",
+  "Tapu belgesi okunaksız/eksik",
+  "Mülkiyet bilgisi tapu ile uyuşmuyor",
+  "Taşınmaz bilgileri hatalı/eksik",
+];
 
 const MULKIYET_ETIKET: Record<string, string> = {
   tek_malik: "Tek Malikim",
@@ -62,6 +69,23 @@ export default function AdminIhaleIncele() {
   const [redFormuAcik, setRedFormuAcik] = useState(false);
   const [redSebebi,  setRedSebebi]  = useState("");
   const [islemYapiliyor, setIslemYapiliyor] = useState(false);
+  const redSebebiRef = useRef<HTMLTextAreaElement>(null);
+
+  function hizliSebepEkle(sebep: string) {
+    const temiz = redSebebi.trim();
+    const yeni = !temiz ? sebep : temiz.includes(sebep) ? temiz : `${temiz}; ${sebep}`;
+    setRedSebebi(yeni);
+    // Odaklanma ve imlec konumu React'in yeniden render etmesini beklemeden
+    // (requestAnimationFrame ile) degil, ayni tikte DOM'a dogrudan yazilir —
+    // aksi halde hemen ardindan yazmaya baslayan bir kullanicinin ilk birkac
+    // tus vurusu kaybolabiliyordu (test sirasinda tespit edildi).
+    const el = redSebebiRef.current;
+    if (el) {
+      el.value = yeni;
+      el.focus();
+      el.selectionStart = el.selectionEnd = yeni.length;
+    }
+  }
   const [hata, setHata] = useState("");
 
   const yukle = useCallback(async () => {
@@ -279,9 +303,22 @@ export default function AdminIhaleIncele() {
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Red Sebebi <span className="text-red-500">*</span>
             </label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {HIZLI_RED_SEBEPLERI.map((sebep) => (
+                <button
+                  key={sebep}
+                  type="button"
+                  onClick={() => hizliSebepEkle(sebep)}
+                  className="text-xs font-medium text-gray-600 bg-gray-100 hover:bg-red-100 hover:text-red-700 px-3 py-1.5 rounded-full transition-colors"
+                >
+                  {sebep}
+                </button>
+              ))}
+            </div>
             <textarea
+              ref={redSebebiRef}
               required rows={3}
-              placeholder="Örn: Yüklenen tapu belgesindeki isim başvuru sahibiyle eşleşmiyor..."
+              placeholder="Örn: Yüklenen tapu belgesindeki isim başvuru sahibiyle eşleşmiyor... (yukarıdan hazır bir sebep seçip üzerine ekleme de yapabilirsiniz)"
               value={redSebebi}
               onChange={(e) => setRedSebebi(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none text-sm mb-3"
