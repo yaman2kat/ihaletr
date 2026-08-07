@@ -77,11 +77,102 @@ CREATE INDEX idx_kullanicilar_davet_eden ON public.kullanicilar(davet_eden_id);
 
 ALTER TABLE public.kullanicilar ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Herkes profilleri okuyabilir"
-  ON public.kullanicilar FOR SELECT USING (true);
+-- Kendi tablosuna bakan bir admin kontrolu RLS icinde dogrudan
+-- subquery ile yazilirsa (SELECT ... FROM kullanicilar WHERE ...) ozyineli
+-- degerlendirmeye yol acabilir; SECURITY DEFINER fonksiyon bunu (RLS'i
+-- tamamen atlayarak) guvenli sekilde cozer. Baska admin kontrollerinde de
+-- yeniden kullanilabilir.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM public.kullanicilar WHERE id = auth.uid() AND rol = 'admin');
+$$;
+
+-- ONEMLI: bu tablo email, telefon, kalan_teklif_hakki, plan_turu, rol,
+-- davet_kodu, davet_eden_id gibi HASSAS alanlar icerir. USING(true) ile
+-- herkese acik olsaydi, anon key ile kimlik dogrulamadan TUM
+-- kullanicilarin e-postasi/telefonu vb. dogrudan REST API ile
+-- cekilebilirdi (canli testle dogrulandi). Sadece kendi satirini ya da
+-- admin her satiri gorebilir. Genel goruntuleme (ihale sahibi/teklif
+-- veren/muteahhit adi gosterme) icin asagidaki "kullanicilar_ozet"
+-- view'i kullanilir (yalnizca ad_soyad/firma_adi/hesap_turu/avatar_url).
+CREATE POLICY "Kullanici kendi profilini ve admin herkesi gorebilir"
+  ON public.kullanicilar FOR SELECT USING (
+    auth.uid() = id OR public.is_admin()
+  );
+
+-- auth/callback: Google/Apple ile girişte bir e-postanın BAŞKA bir
+-- hesaba zaten kayıtlı olup olmadığını (veri sızdırmadan, sadece
+-- boolean) kontrol etmek için — kullanicilar artık başkasının satırını
+-- doğrudan SELECT ile göstermiyor.
+CREATE OR REPLACE FUNCTION public.email_kayitli_mi(p_email text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM public.kullanicilar WHERE email = p_email);
+$$;
+GRANT EXECUTE ON FUNCTION public.email_kayitli_mi(text) TO anon, authenticated;
+
+-- Herkese acik, sadece guvenli/goruntuleme amacli alanlari iceren view.
+-- security_invoker=false (varsayilan) BILEREK kullanilir: view'i
+-- olusturan rolun (tablo sahibi) yetkisiyle calisir, boylece
+-- kullanicilar tablosundaki kisitlayici SELECT RLS'ini bu view icin
+-- "atlar" -- view'in SELECT listesi zaten sadece herkese acik
+-- alanlarla sinirli oldugundan risk yok. (security_invoker=true
+-- yanlislikla denendi, cagiran rolun RLS'ini view'e de uygulayip
+-- anon/authenticated icin view'i bos donduruyordu -- canli testte
+-- tespit edildi.)
+CREATE OR REPLACE VIEW public.kullanicilar_ozet AS
+SELECT id, ad_soyad, firma_adi, hesap_turu, avatar_url
+FROM public.kullanicilar;
+
+GRANT SELECT ON public.kullanicilar_ozet TO anon, authenticated;
 
 CREATE POLICY "Kullanici kendi profilini guncelleyebilir"
   ON public.kullanicilar FOR UPDATE USING (auth.uid() = id);
+
+-- USING (auth.uid() = id) yalnizca SATIR sahipligini dogrular, HANGI
+-- SUTUNUN degistigini kisitlamaz — bu sayede bir kullanici dogrudan
+-- PATCH ile kendi rol/kalan_teklif_hakki/plan_turu alanlarini
+-- degistirip kendini admin yapabiliyor ya da sinirsiz hak/plan
+-- verebiliyordu (canli PoC ile dogrulandi). Bu trigger, admin/sistem
+-- disinda bu hassas alanlarin degistirilmesini engeller.
+--
+-- Sistemin kendi mesru guncellemeleri (teklif hakki dusurme trigger'i,
+-- davet odulu uygulama RPC'si) bu kontrolu, islem-lokal bir bayrak
+-- (ihaletr.sistem_guncellemesi) ayarlayarak bypass eder.
+CREATE OR REPLACE FUNCTION public.kullanici_kisitli_sutun_kontrol()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF current_setting('ihaletr.sistem_guncellemesi', true) = 'true' THEN
+    RETURN NEW;
+  END IF;
+
+  IF public.is_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.rol IS DISTINCT FROM OLD.rol
+     OR NEW.email IS DISTINCT FROM OLD.email
+     OR NEW.kalan_teklif_hakki IS DISTINCT FROM OLD.kalan_teklif_hakki
+     OR NEW.toplam_teklif_sayisi IS DISTINCT FROM OLD.toplam_teklif_sayisi
+     OR NEW.plan_turu IS DISTINCT FROM OLD.plan_turu
+     OR NEW.premium_bitis_tarihi IS DISTINCT FROM OLD.premium_bitis_tarihi
+     OR NEW.davet_kodu IS DISTINCT FROM OLD.davet_kodu
+     OR NEW.davet_eden_id IS DISTINCT FROM OLD.davet_eden_id
+  THEN
+    RAISE EXCEPTION 'KISITLI_ALAN_DEGISTIRILEMEZ: Bu alanlar yalnizca admin/sistem tarafindan degistirilebilir.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_kullanici_kisitli_sutun_kontrol ON public.kullanicilar;
+CREATE TRIGGER trg_kullanici_kisitli_sutun_kontrol
+  BEFORE UPDATE ON public.kullanicilar
+  FOR EACH ROW EXECUTE FUNCTION public.kullanici_kisitli_sutun_kontrol();
 
 -- Yeni auth kaydında otomatik profil oluştur.
 -- Kayıt sırasında bir davet kodu geldiyse (davet_referans_kodu), davet
@@ -207,6 +298,37 @@ CREATE POLICY "Admin ihaleyi inceleyebilir"
 CREATE POLICY "Olusturan ihalesini silebilir"
   ON public.ihaleler FOR DELETE USING (auth.uid() = olusturan_id);
 
+-- Ihale olusturmada hic hiz siniri yoktu -- bir kullanici sinirsiz ihale
+-- acip platformu spam'leyebilirdi (canli testte dogrulandi: 10 ardisik
+-- istek 10/10 basarili oldu). Misafir akisi (olusturan_id NULL) IP
+-- bazli sinirlama pratik olmadigindan kapsam disi birakildi.
+CREATE OR REPLACE FUNCTION public.ihale_olusturma_hiz_siniri()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  son_saat_sayisi integer;
+BEGIN
+  IF NEW.olusturan_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT count(*) INTO son_saat_sayisi
+  FROM public.ihaleler
+  WHERE olusturan_id = NEW.olusturan_id
+    AND created_at > now() - interval '1 hour';
+
+  IF son_saat_sayisi >= 10 THEN
+    RAISE EXCEPTION 'HIZ_SINIRI_ASILDI: Saatte en fazla 10 ihale olusturabilirsiniz.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_ihale_olusturma_hiz_siniri ON public.ihaleler;
+CREATE TRIGGER trg_ihale_olusturma_hiz_siniri
+  BEFORE INSERT ON public.ihaleler
+  FOR EACH ROW EXECUTE FUNCTION public.ihale_olusturma_hiz_siniri();
+
 -- Ihale sahibi kendi satirinin HER sutununu guncelleyebilir (yukaridaki
 -- USING politikasi satir bazlidir, sutun kisitlamaz) — bu, sahibin
 -- dogrudan PATCH ile inceleme_durumu'nu kendi kendine "onaylandi" yaparak
@@ -236,14 +358,11 @@ BEGIN
   END IF;
 
   -- Not: mevcut_teklif / goruntulenme_sayisi kasitli olarak bu kontrolun
-  -- disinda birakildi — teklif eklenince calisan guncelle_mevcut_teklif()
-  -- trigger'i bu alani BIDDER'IN kendi oturumuyla (ic ice/nested trigger
-  -- olarak) gunceller; pg_trigger_depth() ile "dogrudan PATCH" / "nested
-  -- trigger" ayrimi denendiginde bidding akisini kirdigi tespit edildi
-  -- (regresyon testiyle dogrulandi). mevcut_teklif zaten her yeni teklifte
-  -- yeniden hesaplandigindan (MIN(tutar)) manuel bir PATCH kalici bir
-  -- etki yaratamaz; risk dusuk kabul edilip bidding akisi bozulmadan
-  -- birakildi.
+  -- disinda birakildi. guncelle_mevcut_teklif() artik SECURITY DEFINER
+  -- oldugundan (RLS'i atlar) bu trigger'i hic tetiklemez/etkilemez zaten;
+  -- mevcut_teklif her yeni teklifte yeniden hesaplandigindan (MIN(tutar))
+  -- manuel bir PATCH kalici bir etki yaratamaz; risk dusuk kabul edilip
+  -- disarida birakildi.
 
   RETURN NEW;
 END;
@@ -315,21 +434,38 @@ CREATE TRIGGER trg_teklif_hakki_kontrol
   BEFORE INSERT ON public.teklifler
   FOR EACH ROW EXECUTE FUNCTION public.teklif_hakki_kontrol();
 
--- Teklif eklenince ihaledeki mevcut_teklif'i otomatik güncelle
+-- Teklif eklenince/silininde ihaledeki mevcut_teklif'i otomatik güncelle.
+-- DELETE de dahil edilmezse (ör. bir kullanici hesabini silince teklifleri
+-- CASCADE ile silinince) mevcut_teklif artik var olmayan bir teklifi
+-- gostermeye devam ederdi (bayat/yanlis veri).
+--
+-- SECURITY DEFINER ZORUNLU: bu trigger, teklifi VEREN kullanicinin kendi
+-- oturumuyla (invoker olarak) calisirsa, teklif veren kisi o ihalenin
+-- SAHIBI degilse (ki normal/en yaygin senaryo tam olarak budur) ihaleler
+-- UPDATE RLS politikasi (sadece sahibi/admin) bu UPDATE'i SESSIZCE 0
+-- satir etkileyerek engeller (hata firlatmaz) — mevcut_teklif hicbir
+-- zaman guncellenmez. Canli testte dogrulandi: bidder != owner
+-- senaryosunda mevcut_teklif null kaliyordu. SECURITY DEFINER, RLS'i
+-- tamamen atlayip bu SATIR-SEVIYESI hesaplama sistemin kendi isi olarak
+-- her zaman calismasini saglar (fonksiyon icinde kullanici girdisiyle
+-- keyfi bir ihale/deger yazilamiyor, sadece MIN(tutar) hesabi yapiyor).
 CREATE OR REPLACE FUNCTION public.guncelle_mevcut_teklif()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_ihale_id uuid := COALESCE(NEW.ihale_id, OLD.ihale_id);
 BEGIN
   UPDATE public.ihaleler
   SET
-    mevcut_teklif = (SELECT MIN(tutar) FROM public.teklifler WHERE ihale_id = NEW.ihale_id),
+    mevcut_teklif = (SELECT MIN(tutar) FROM public.teklifler WHERE ihale_id = v_ihale_id),
     updated_at    = now()
-  WHERE id = NEW.ihale_id;
-  RETURN NEW;
+  WHERE id = v_ihale_id;
+  RETURN COALESCE(NEW, OLD);
 END;
 $$;
 
+DROP TRIGGER IF EXISTS on_teklif_degisti ON public.teklifler;
 CREATE TRIGGER on_teklif_degisti
-  AFTER INSERT OR UPDATE ON public.teklifler
+  AFTER INSERT OR UPDATE OR DELETE ON public.teklifler
   FOR EACH ROW EXECUTE FUNCTION public.guncelle_mevcut_teklif();
 
 -- ------------------------------------------------------------
@@ -423,10 +559,24 @@ CREATE POLICY "Hassas belgeler sadece admin, digerleri herkese acik"
 -- GEÇİCİ: Misafir kullanıcıların da belge yükleyebilmesi için genişletildi. Eski hali:
 -- CREATE POLICY "Giris yapan belge yukleyebilir"
 --   ON public.belgeler FOR INSERT WITH CHECK (auth.uid() = yukleyen_id);
+-- yukleyen_id kontrolunun yani sira, belge bir ihaleye bagliysa (ihale_id
+-- NOT NULL) o ihalenin GERCEKTEN yukleyene ait oldugu da dogrulanir —
+-- aksi halde herhangi bir kullanici baskasinin ihalesine sahte bir tapu/
+-- belge satiri ekleyip admin incelemesini karistirabilirdi.
 CREATE POLICY "Giris yapan ya da misafir belge yukleyebilir"
   ON public.belgeler FOR INSERT WITH CHECK (
-    (auth.uid() IS NOT NULL AND auth.uid() = yukleyen_id)
-    OR (auth.uid() IS NULL AND yukleyen_id IS NULL)
+    (
+      (auth.uid() IS NOT NULL AND auth.uid() = yukleyen_id)
+      OR (auth.uid() IS NULL AND yukleyen_id IS NULL)
+    )
+    AND (
+      ihale_id IS NULL
+      OR EXISTS (
+        SELECT 1 FROM public.ihaleler
+        WHERE id = ihale_id
+          AND (olusturan_id = auth.uid() OR (olusturan_id IS NULL AND auth.uid() IS NULL))
+      )
+    )
   );
 
 CREATE POLICY "Yukleyen kendi belgesini silebilir"
@@ -532,6 +682,7 @@ ALTER TABLE public.kullanicilar
 CREATE OR REPLACE FUNCTION public.guncelle_kullanici_teklif_hakki()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
   UPDATE public.kullanicilar
   SET
     toplam_teklif_sayisi = toplam_teklif_sayisi + 1,
@@ -557,6 +708,7 @@ RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   yeni_hak integer;
 BEGIN
+  PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
   UPDATE public.kullanicilar
   SET kalan_teklif_hakki = kalan_teklif_hakki + p_miktar
   WHERE id = p_kullanici_id
@@ -680,8 +832,12 @@ ALTER TABLE public.muteahhit_yorumlar ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Muteahhit yorumlari herkese acik"
   ON public.muteahhit_yorumlar FOR SELECT USING (true);
 
+-- muteahhit_id <> kullanici_id: bir muteahhit kendi profiline sahte
+-- olumlu yorum/puan ekleyemesin (self-review).
 CREATE POLICY "Giris yapan muteahhite yorum ekleyebilir"
-  ON public.muteahhit_yorumlar FOR INSERT WITH CHECK (auth.uid() = kullanici_id);
+  ON public.muteahhit_yorumlar FOR INSERT WITH CHECK (
+    auth.uid() = kullanici_id AND muteahhit_id <> kullanici_id
+  );
 
 CREATE POLICY "Kullanici kendi muteahhit yorumunu silebilir"
   ON public.muteahhit_yorumlar FOR DELETE USING (auth.uid() = kullanici_id);
@@ -830,6 +986,7 @@ BEGIN
   SELECT hesap_turu INTO v_hesap_turu FROM public.kullanicilar WHERE id = p_eden_id;
 
   IF v_hesap_turu = 'muteahhit' THEN
+    PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
     UPDATE public.kullanicilar
     SET kalan_teklif_hakki = CASE
       WHEN kalan_teklif_hakki >= 99999 THEN kalan_teklif_hakki
@@ -922,6 +1079,7 @@ BEGIN
   v_odul_turu := COALESCE(v_davet.odul_turu, p_odul_turu);
 
   IF v_odul_turu = 'teklif_hakki' THEN
+    PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
     UPDATE public.kullanicilar
     SET kalan_teklif_hakki = CASE
       WHEN kalan_teklif_hakki >= 99999 THEN kalan_teklif_hakki
@@ -977,6 +1135,7 @@ BEGIN
       SELECT id INTO v_eden_id FROM public.kullanicilar WHERE davet_kodu = upper(p_ref_kodu);
 
       IF v_eden_id IS NOT NULL AND v_eden_id <> auth.uid() THEN
+        PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
         UPDATE public.kullanicilar SET davet_eden_id = v_eden_id WHERE id = auth.uid();
 
         IF (SELECT email_confirmed_at FROM auth.users WHERE id = auth.uid()) IS NOT NULL THEN
@@ -1012,3 +1171,41 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION public.ihale_otomatik_sonlandir() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ihale_otomatik_sonlandir() TO service_role;
+
+-- ------------------------------------------------------------
+-- 12. ÖDEME KAYITLARI (audit log + rate limiting + mutabakat)
+-- api/odeme/route.ts her odeme denemesini (basarili/basarisiz/DB
+-- guncelleme hatasi) buraya yazar. Uc amaca hizmet eder:
+--  1) Audit log: kritik odeme olaylari artik sadece console.error
+--     degil, sorgulanabilir bir tabloda.
+--  2) Rate limiting: kart deneme (card testing) saldirisina karsi,
+--     route bu tabloyu sorgulayip kisa surede cok fazla deneme varsa
+--     reddeder.
+--  3) Mutabakat: Iyzico odemesi basarili ama plan/hak guncellemesi
+--     basarisiz olursa (ör. gecici DB hatasi) bu durum "basarisiz
+--     sessizce yutulmak" yerine kayit altina alinir.
+-- ------------------------------------------------------------
+
+CREATE TABLE public.odeme_kayitlari (
+  id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  kullanici_id      uuid        NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  paket             text        NOT NULL,
+  iyzico_payment_id text,
+  durum             text        NOT NULL CHECK (durum IN ('basarili', 'basarisiz', 'db_guncelleme_hatasi')),
+  hata_mesaji       text,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_odeme_kayitlari_kullanici ON public.odeme_kayitlari(kullanici_id, created_at);
+
+ALTER TABLE public.odeme_kayitlari ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Kullanici kendi odeme kayitlarini gorebilir"
+  ON public.odeme_kayitlari FOR SELECT USING (auth.uid() = kullanici_id);
+
+CREATE POLICY "Admin tum odeme kayitlarini gorebilir"
+  ON public.odeme_kayitlari FOR SELECT USING (public.is_admin());
+
+-- INSERT yalnizca service_role'den (api/odeme/route.ts) gelir; service
+-- role RLS'i tamamen atladigi icin ayri bir INSERT politikasi gerekmez,
+-- authenticated/anon icin INSERT taniml bile degil (varsayilan: red).

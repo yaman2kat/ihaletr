@@ -147,8 +147,10 @@ export default function OdemeSayfasi({ params }: { params: Promise<{ paket: stri
         return;
       }
 
-      // Başarılı → panel'e yönlendir
-      router.push("/panel?odeme=basarili");
+      // Basarili -> panel'e yonlendir. Odeme alindi ama hesaba yansitma
+      // (plan/hak guncellemesi) basarisiz olduysa (ör. gecici DB hatasi)
+      // kullaniciyi yaniltmadan ayri bir uyari bandi gosteriyoruz.
+      router.push(veri.uyari ? "/panel?odeme=uyari" : "/panel?odeme=basarili");
 
     } catch {
       setHata("Bağlantı hatası, lütfen tekrar deneyin.");

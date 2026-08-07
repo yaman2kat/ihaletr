@@ -58,10 +58,24 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
       if (ihaleIdleri.length > 0) {
         const { data: teklifData } = await supabase
           .from("teklifler")
-          .select("*, ihale:ihaleler(baslik), teklif_veren:kullanicilar(ad_soyad, firma_adi)")
+          .select("*, ihale:ihaleler(baslik)")
           .in("ihale_id", ihaleIdleri)
           .order("created_at", { ascending: false });
-        setGelenTeklifler((teklifData ?? []) as GelenTeklif[]);
+
+        // kullanicilar tablosu artik sadece kendi satirini gosterdigi icin
+        // (RLS), teklif verenlerin ad/firma bilgisi herkese acik
+        // "kullanicilar_ozet" view'inden ayrica cekilip birlestiriliyor.
+        const teklifSahibiIdleri = [...new Set((teklifData ?? []).map((t) => t.kullanici_id))];
+        const { data: kullanicilar } = teklifSahibiIdleri.length > 0
+          ? await supabase.from("kullanicilar_ozet").select("id, ad_soyad, firma_adi").in("id", teklifSahibiIdleri)
+          : { data: [] as { id: string; ad_soyad: string; firma_adi: string | null }[] };
+        const kullaniciHarita = new Map((kullanicilar ?? []).map((k) => [k.id, k]));
+
+        const zenginlestirilmis = (teklifData ?? []).map((t) => ({
+          ...t,
+          teklif_veren: kullaniciHarita.get(t.kullanici_id) ?? null,
+        }));
+        setGelenTeklifler(zenginlestirilmis as GelenTeklif[]);
       }
 
       setYukleniyor(false);

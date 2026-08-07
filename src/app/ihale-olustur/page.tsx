@@ -233,7 +233,10 @@ export default function IhaleOlustur() {
       .single();
 
     if (ihaleError || !ihaleData) {
-      setHata("İhale oluşturulamadı: " + (ihaleError?.message ?? "Bilinmeyen hata"));
+      const mesaj = ihaleError?.message?.includes("HIZ_SINIRI_ASILDI")
+        ? "Kısa sürede çok fazla ihale oluşturdunuz. Lütfen bir süre sonra tekrar deneyin."
+        : "İhale oluşturulamadı: " + (ihaleError?.message ?? "Bilinmeyen hata");
+      setHata(mesaj);
       setYukleniyor(false);
       return;
     }

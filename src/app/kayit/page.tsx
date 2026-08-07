@@ -12,7 +12,7 @@ function ceviriHata(mesaj: string): string {
   if (mesaj.includes("User already registered") || mesaj.includes("already been registered"))
     return "Bu e-posta adresi zaten kayıtlı, lütfen giriş yapın.";
   if (mesaj.includes("Password should be"))
-    return "Şifre en az 6 karakter olmalıdır.";
+    return "Şifre en az 8 karakter olmalıdır.";
   if (mesaj.includes("Invalid email"))
     return "Geçerli bir e-posta adresi girin.";
   if (mesaj.includes("Network"))
@@ -70,8 +70,8 @@ function KayitForm() {
       setHata("Şifreler eşleşmiyor.");
       return;
     }
-    if (form.sifre.length < 6) {
-      setHata("Şifre en az 6 karakter olmalıdır.");
+    if (form.sifre.length < 8) {
+      setHata("Şifre en az 8 karakter olmalıdır.");
       return;
     }
     if (muteahhitAlanlariGerekli && !form.firmaAdi.trim()) {
@@ -450,7 +450,7 @@ function KayitForm() {
                 </label>
                 <div className="relative">
                   <input id="sifre" type={sifreGoster ? "text" : "password"} required
-                    placeholder="Min. 6 karakter"
+                    placeholder="Min. 8 karakter"
                     value={form.sifre}
                     onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))}
                     className="w-full border border-gray-200 rounded-lg pl-4 pr-10 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"

@@ -31,15 +31,28 @@ export default function DavetKart({ userId, onOduluUygulandi }: DavetKartProps) 
       const [profilRes, davetRes, ihaleRes] = await Promise.all([
         supabase.from("kullanicilar").select("davet_kodu").eq("id", userId).single(),
         supabase.from("davetler")
-          .select("*, davet_edilen:kullanicilar!davetler_davet_edilen_id_fkey(ad_soyad)")
+          .select("*")
           .eq("davet_eden_id", userId)
           .eq("odul_verildi", false)
           .order("created_at", { ascending: false }),
         supabase.from("ihaleler").select("id, baslik").eq("olusturan_id", userId).eq("durum", "aktif"),
       ]);
 
+      // kullanicilar tablosu artik sadece kendi satirini gosterdigi icin
+      // (RLS), davet edilenlerin adi herkese acik "kullanicilar_ozet"
+      // view'inden ayrica cekilip birlestiriliyor.
+      const davetEdilenIdleri = [...new Set((davetRes.data ?? []).map((d) => d.davet_edilen_id))];
+      const { data: kullanicilar } = davetEdilenIdleri.length > 0
+        ? await supabase.from("kullanicilar_ozet").select("id, ad_soyad").in("id", davetEdilenIdleri)
+        : { data: [] as { id: string; ad_soyad: string }[] };
+      const kullaniciHarita = new Map((kullanicilar ?? []).map((k) => [k.id, k]));
+      const zenginlestirilmisDavetler = (davetRes.data ?? []).map((d) => ({
+        ...d,
+        davet_edilen: kullaniciHarita.get(d.davet_edilen_id) ?? undefined,
+      }));
+
       setDavetKodu(profilRes.data?.davet_kodu ?? null);
-      setDavetler((davetRes.data ?? []) as Davet[]);
+      setDavetler(zenginlestirilmisDavetler as Davet[]);
       setAktifIhaleler((ihaleRes.data ?? []) as AktifIhale[]);
       setYukleniyor(false);
     }

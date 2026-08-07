@@ -18,12 +18,52 @@ const PAKET: Record<string, {
   pro:       { fiyat: "1499.00", aciklama: "Pro Teklif Paketi (1 ay)", tip: "teklif", teklif_hak: 99999 },
 };
 
+// Kart deneme (card testing) saldirisina karsi: bir kullanicinin belirli
+// bir surede yapabilecegi odeme denemesi sayisi sinirlanir.
+const RATE_LIMIT_PENCERE_DK = 10;
+const RATE_LIMIT_MAKS_DENEME = 5;
+
 function supabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   );
+}
+
+async function krediUygula(
+  db: ReturnType<typeof supabaseAdmin>,
+  kullaniciId: string,
+  paketBilgi: (typeof PAKET)[string]
+): Promise<{ basarili: boolean; hata?: string }> {
+  if (paketBilgi.tip === "plan" && paketBilgi.plan) {
+    const bitisTarihi = new Date();
+    bitisTarihi.setDate(bitisTarihi.getDate() + 30);
+    const { error } = await db.from("kullanicilar").update({
+      plan_turu:            paketBilgi.plan,
+      premium_bitis_tarihi: bitisTarihi.toISOString(),
+    }).eq("id", kullaniciId);
+    return { basarili: !error, hata: error?.message };
+  }
+
+  if (paketBilgi.tip === "teklif" && paketBilgi.teklif_hak !== undefined) {
+    if (paketBilgi.teklif_hak >= 99999) {
+      const { error } = await db.from("kullanicilar")
+        .update({ kalan_teklif_hakki: 99999 })
+        .eq("id", kullaniciId);
+      return { basarili: !error, hata: error?.message };
+    }
+    // Tek atomik RPC (artir_teklif_hakki) — oku-hesapla-yaz yerine tek
+    // UPDATE ... SET kalan_teklif_hakki = kalan_teklif_hakki + N calisir;
+    // eszamanli iki odeme tamamlanmasi birbirinin yazdigini ezemez.
+    const { error } = await db.rpc("artir_teklif_hakki", {
+      p_kullanici_id: kullaniciId,
+      p_miktar: paketBilgi.teklif_hak,
+    });
+    return { basarili: !error, hata: error?.message };
+  }
+
+  return { basarili: true };
 }
 
 export async function POST(req: NextRequest) {
@@ -38,6 +78,22 @@ export async function POST(req: NextRequest) {
     }
     const kullaniciId = user.id;
     const email = user.email!;
+    const db = supabaseAdmin();
+
+    // ─── Rate limit: kart deneme (card testing) korumasi ────────────────────
+    const pencereBaslangici = new Date(Date.now() - RATE_LIMIT_PENCERE_DK * 60_000).toISOString();
+    const { count: sonDenemeSayisi } = await db
+      .from("odeme_kayitlari")
+      .select("*", { count: "exact", head: true })
+      .eq("kullanici_id", kullaniciId)
+      .gte("created_at", pencereBaslangici);
+
+    if ((sonDenemeSayisi ?? 0) >= RATE_LIMIT_MAKS_DENEME) {
+      return NextResponse.json(
+        { hata: `Çok fazla ödeme denemesi yaptınız. Lütfen ${RATE_LIMIT_PENCERE_DK} dakika sonra tekrar deneyin.` },
+        { status: 429 }
+      );
+    }
 
     const body = await req.json();
     const { paket, kart } = body as {
@@ -71,45 +127,41 @@ export async function POST(req: NextRequest) {
     });
 
     if (sonuc.status !== "success") {
+      await db.from("odeme_kayitlari").insert({
+        kullanici_id: kullaniciId,
+        paket,
+        durum: "basarisiz",
+        hata_mesaji: sonuc.errorMessage ?? sonuc.errorCode ?? "bilinmeyen hata",
+      });
       return NextResponse.json(
         { hata: sonuc.errorMessage ?? "Ödeme işlemi başarısız oldu.", errorCode: sonuc.errorCode },
         { status: 400 }
       );
     }
 
-    // ─── Ödeme başarılı → Supabase güncelle ─────────────────────────────────
-    const db = supabaseAdmin();
-
-    if (paketBilgi.tip === "plan" && paketBilgi.plan) {
-      const bitisTarihi = new Date();
-      bitisTarihi.setDate(bitisTarihi.getDate() + 30);
-
-      const { error } = await db.from("kullanicilar").update({
-        plan_turu:             paketBilgi.plan,
-        premium_bitis_tarihi:  bitisTarihi.toISOString(),
-      }).eq("id", kullaniciId);
-
-      if (error) console.error("Plan güncelleme hatası:", error);
-
-    } else if (paketBilgi.tip === "teklif" && paketBilgi.teklif_hak !== undefined) {
-      if (paketBilgi.teklif_hak >= 99999) {
-        // Pro → sınırsız
-        await db.from("kullanicilar")
-          .update({ kalan_teklif_hakki: 99999 })
-          .eq("id", kullaniciId);
-      } else {
-        // Mevcut hakkı artır — tek atomik RPC (artir_teklif_hakki), oku-hesapla-yaz
-        // yerine tek UPDATE ... SET kalan_teklif_hakki = kalan_teklif_hakki + N
-        // çalıştırır; eşzamanlı iki ödeme tamamlanması birbirinin yazdığını ezemez.
-        const { error: rpcError } = await db.rpc("artir_teklif_hakki", {
-          p_kullanici_id: kullaniciId,
-          p_miktar: paketBilgi.teklif_hak,
-        });
-        if (rpcError) console.error("Teklif hakkı artırma hatası:", rpcError);
-      }
+    // ─── Ödeme başarılı → Supabase güncelle (basarisizsa 1 kez tekrar dene) ──
+    let kredi = await krediUygula(db, kullaniciId, paketBilgi);
+    if (!kredi.basarili) {
+      console.error("Kredi uygulama hatasi, tekrar deneniyor:", kredi.hata);
+      kredi = await krediUygula(db, kullaniciId, paketBilgi);
     }
 
-    return NextResponse.json({ basarili: true, paymentId: sonuc.paymentId });
+    // Odeme her durumda (basarili ya da hesaba yansitilamadi) kayit altina
+    // alinir — kullanicinin karti tahsil edildigi icin bu asamadan sonra
+    // "basarisiz" degil, en kotu ihtimalle "odendi ama yansitilamadi" olur.
+    await db.from("odeme_kayitlari").insert({
+      kullanici_id: kullaniciId,
+      paket,
+      iyzico_payment_id: sonuc.paymentId,
+      durum: kredi.basarili ? "basarili" : "db_guncelleme_hatasi",
+      hata_mesaji: kredi.basarili ? null : kredi.hata,
+    });
+
+    if (!kredi.basarili) {
+      console.error(`ODEME MUTABAKAT HATASI: kullanici=${kullaniciId} paket=${paket} paymentId=${sonuc.paymentId} hata=${kredi.hata}`);
+    }
+
+    return NextResponse.json({ basarili: true, paymentId: sonuc.paymentId, uyari: !kredi.basarili });
 
   } catch (err) {
     console.error("Ödeme sunucu hatası:", err);

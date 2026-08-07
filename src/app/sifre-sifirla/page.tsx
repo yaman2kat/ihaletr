@@ -47,8 +47,8 @@ export default function SifreSifirla() {
     e.preventDefault();
     setHata("");
 
-    if (form.sifre.length < 6) {
-      setHata("Şifre en az 6 karakter olmalıdır.");
+    if (form.sifre.length < 8) {
+      setHata("Şifre en az 8 karakter olmalıdır.");
       return;
     }
     if (form.sifre !== form.sifreTekrar) {
@@ -167,7 +167,7 @@ export default function SifreSifirla() {
                 required
                 autoFocus
                 minLength={6}
-                placeholder="En az 6 karakter"
+                placeholder="En az 8 karakter"
                 value={form.sifre}
                 onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))}
                 className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"

@@ -38,12 +38,11 @@ export async function GET(request: Request) {
         if (!profil) {
           let hesapZatenVar = false;
           if (user.email) {
-            const { data: mevcutHesap } = await supabase
-              .from("kullanicilar")
-              .select("id")
-              .eq("email", user.email)
-              .maybeSingle();
-            hesapZatenVar = !!mevcutHesap;
+            // kullanicilar tablosu artik sadece kendi satirini gostermeye
+            // izin veriyor (RLS); baska bir email'in kayitli olup olmadigi
+            // sadece bu dar-kapsamli RPC ile (veri sizdirmadan) sorulabilir.
+            const { data } = await supabase.rpc("email_kayitli_mi", { p_email: user.email });
+            hesapZatenVar = !!data;
           }
 
           await supabase.auth.signOut();

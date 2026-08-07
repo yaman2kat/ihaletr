@@ -84,9 +84,20 @@ export default async function IhaleDetay({
   let teklifSayfa = 1;
   let teklifToplamSayfa = 1;
 
-  function eslesenTeklifler(dbTeklifler: { kullanici_id: string; tutar: number; created_at: string; kullanicilar: unknown }[]): MockTeklif[] {
+  // kullanicilar tablosu artik sadece kendi satirini gosterdigi icin
+  // (RLS), teklif verenlerin ad/firma bilgisi ayri bir sorguyla, herkese
+  // acik "kullanicilar_ozet" view'inden (sadece ad_soyad/firma_adi)
+  // cekilip client tarafinda birlestiriliyor.
+  async function eslesenTeklifler(
+    dbTeklifler: { kullanici_id: string; tutar: number; created_at: string }[]
+  ): Promise<MockTeklif[]> {
+    const idler = [...new Set(dbTeklifler.map((t) => t.kullanici_id))];
+    const { data: kullanicilar } = idler.length > 0
+      ? await supabase.from("kullanicilar_ozet").select("id, ad_soyad, firma_adi").in("id", idler)
+      : { data: [] as { id: string; ad_soyad: string; firma_adi: string | null }[] };
+    const harita = new Map((kullanicilar ?? []).map((k) => [k.id, k]));
     return dbTeklifler.map((t) => {
-      const kullanici = Array.isArray(t.kullanicilar) ? t.kullanicilar[0] : t.kullanicilar as { ad_soyad?: string; firma_adi?: string } | null;
+      const kullanici = harita.get(t.kullanici_id);
       return {
         kullanici_adi: kullanici?.firma_adi || kullanici?.ad_soyad || "Kullanıcı",
         tarih: t.created_at,
@@ -103,10 +114,10 @@ export default async function IhaleDetay({
       // çalışan, sınırlı sayıda ziyaretin olduğu bir yoldur.
       const { data: dbTeklifler, count } = await supabase
         .from("teklifler")
-        .select("kullanici_id, tutar, created_at, kullanicilar(ad_soyad, firma_adi)", { count: "exact" })
+        .select("kullanici_id, tutar, created_at", { count: "exact" })
         .eq("ihale_id", id)
         .order("tutar", { ascending: true });
-      teklifler = eslesenTeklifler(dbTeklifler ?? []);
+      teklifler = await eslesenTeklifler(dbTeklifler ?? []);
       teklifSayisi = count ?? teklifler.length;
     } else {
       // İhale devam ederken "Son Teklifler" widget'ı sayfalanır — çok
@@ -117,11 +128,11 @@ export default async function IhaleDetay({
       const to = from + TEKLIF_SAYFA_BOYUTU - 1;
       const { data: dbTeklifler, count } = await supabase
         .from("teklifler")
-        .select("kullanici_id, tutar, created_at, kullanicilar(ad_soyad, firma_adi)", { count: "exact" })
+        .select("kullanici_id, tutar, created_at", { count: "exact" })
         .eq("ihale_id", id)
         .order("tutar", { ascending: true })
         .range(from, to);
-      teklifler = eslesenTeklifler(dbTeklifler ?? []);
+      teklifler = await eslesenTeklifler(dbTeklifler ?? []);
       teklifSayisi = count ?? 0;
       teklifToplamSayfa = Math.max(1, Math.ceil(teklifSayisi / TEKLIF_SAYFA_BOYUTU));
     }
