@@ -178,3 +178,29 @@ export interface Davet {
   odul_verildi_tarihi: string | null;
   davet_edilen?: { ad_soyad: string };
 }
+
+export type BildirimTuru =
+  | "yeni_teklif" | "ihale_onaylandi" | "ihale_reddedildi"
+  | "ihale_otomatik_sonlandi" | "davet_odulu" | "odeme_sorunu" | "bolge_eslesmesi";
+
+export interface Bildirim {
+  id: string;
+  kullanici_id: string;
+  tur: BildirimTuru;
+  baslik: string;
+  mesaj: string;
+  link: string | null;
+  ihale_id: string | null;
+  okundu: boolean;
+  created_at: string;
+}
+
+export interface BildirimTercihleri {
+  kullanici_id: string;
+  yeni_teklif: boolean;
+  ihale_durumu: boolean;
+  davet_odulu: boolean;
+  odeme_sorunu: boolean;
+  bolge_eslesmesi: boolean;
+  updated_at: string;
+}

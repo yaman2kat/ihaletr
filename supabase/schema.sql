@@ -13,6 +13,7 @@
 DROP TRIGGER IF EXISTS on_auth_user_created         ON auth.users;
 DROP TRIGGER IF EXISTS on_auth_user_email_confirmed ON auth.users;
 
+DROP TABLE IF EXISTS public.bildirim_tercihleri         CASCADE;
 DROP TABLE IF EXISTS public.bildirimler                 CASCADE;
 DROP TABLE IF EXISTS public.odeme_kayitlari              CASCADE;
 DROP TABLE IF EXISTS public.davetler                    CASCADE;
@@ -209,6 +210,8 @@ BEGIN
     v_davet_eden_id,
     v_hesap_turu
   );
+
+  INSERT INTO public.bildirim_tercihleri (kullanici_id) VALUES (NEW.id) ON CONFLICT DO NOTHING;
 
   IF v_davet_eden_id IS NOT NULL AND NEW.email_confirmed_at IS NOT NULL THEN
     PERFORM public.davet_odulunu_baslat(v_davet_eden_id, NEW.id);
@@ -1288,7 +1291,9 @@ BEGIN
   SELECT olusturan_id, baslik INTO v_sahip_id, v_ihale_baslik
   FROM public.ihaleler WHERE id = NEW.ihale_id;
 
-  IF v_sahip_id IS NOT NULL AND v_sahip_id <> NEW.kullanici_id THEN
+  IF v_sahip_id IS NOT NULL AND v_sahip_id <> NEW.kullanici_id
+     AND COALESCE((SELECT yeni_teklif FROM public.bildirim_tercihleri WHERE kullanici_id = v_sahip_id), true)
+  THEN
     INSERT INTO public.bildirimler (kullanici_id, tur, baslik, mesaj, ihale_id, link)
     VALUES (
       v_sahip_id, 'yeni_teklif', 'Yeni teklif alındı',
@@ -1311,6 +1316,10 @@ CREATE OR REPLACE FUNCTION public.bildirim_ihale_durumu()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   IF NEW.olusturan_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF NOT COALESCE((SELECT ihale_durumu FROM public.bildirim_tercihleri WHERE kullanici_id = NEW.olusturan_id), true) THEN
     RETURN NEW;
   END IF;
 
@@ -1352,7 +1361,9 @@ CREATE TRIGGER trg_bildirim_ihale_durumu
 CREATE OR REPLACE FUNCTION public.bildirim_davet_odulu()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-  IF NEW.odul_verildi = true AND OLD.odul_verildi IS DISTINCT FROM true THEN
+  IF NEW.odul_verildi = true AND OLD.odul_verildi IS DISTINCT FROM true
+     AND COALESCE((SELECT davet_odulu FROM public.bildirim_tercihleri WHERE kullanici_id = NEW.davet_eden_id), true)
+  THEN
     INSERT INTO public.bildirimler (kullanici_id, tur, baslik, mesaj, link)
     VALUES (
       NEW.davet_eden_id, 'davet_odulu', 'Davet ödülünüz uygulandı',
@@ -1378,7 +1389,9 @@ CREATE TRIGGER trg_bildirim_davet_odulu
 CREATE OR REPLACE FUNCTION public.bildirim_odeme_sorunu()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-  IF NEW.durum = 'db_guncelleme_hatasi' THEN
+  IF NEW.durum = 'db_guncelleme_hatasi'
+     AND COALESCE((SELECT odeme_sorunu FROM public.bildirim_tercihleri WHERE kullanici_id = NEW.kullanici_id), true)
+  THEN
     INSERT INTO public.bildirimler (kullanici_id, tur, baslik, mesaj, link)
     VALUES (
       NEW.kullanici_id, 'odeme_sorunu', 'Ödemenizde bir sorun oluştu',
@@ -1394,3 +1407,106 @@ DROP TRIGGER IF EXISTS trg_bildirim_odeme_sorunu ON public.odeme_kayitlari;
 CREATE TRIGGER trg_bildirim_odeme_sorunu
   AFTER INSERT ON public.odeme_kayitlari
   FOR EACH ROW EXECUTE FUNCTION public.bildirim_odeme_sorunu();
+
+-- ------------------------------------------------------------
+-- 14. BİLDİRİM TERCİHLERİ
+-- Kullanici hangi bildirim turlerini almak istedigini kapatabilir.
+-- Yeni kayitta handle_new_user() otomatik varsayilan (hepsi acik) satir
+-- olusturur; mevcut kullanicilar icin asagida bir kerelik backfill var.
+-- ------------------------------------------------------------
+
+CREATE TABLE public.bildirim_tercihleri (
+  kullanici_id    uuid        PRIMARY KEY REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  yeni_teklif     boolean     NOT NULL DEFAULT true,
+  ihale_durumu    boolean     NOT NULL DEFAULT true,
+  davet_odulu     boolean     NOT NULL DEFAULT true,
+  odeme_sorunu    boolean     NOT NULL DEFAULT true,
+  bolge_eslesmesi boolean     NOT NULL DEFAULT true,
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.bildirim_tercihleri ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Kullanici kendi tercihlerini gorebilir"
+  ON public.bildirim_tercihleri FOR SELECT USING (auth.uid() = kullanici_id);
+
+CREATE POLICY "Kullanici kendi tercihlerini olusturabilir"
+  ON public.bildirim_tercihleri FOR INSERT WITH CHECK (auth.uid() = kullanici_id);
+
+CREATE POLICY "Kullanici kendi tercihlerini guncelleyebilir"
+  ON public.bildirim_tercihleri FOR UPDATE USING (auth.uid() = kullanici_id) WITH CHECK (auth.uid() = kullanici_id);
+
+CREATE TRIGGER trg_bildirim_tercihleri_updated_at
+  BEFORE UPDATE ON public.bildirim_tercihleri
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- Mevcut kullanicilar icin bir kerelik backfill (yeni kullanicilar
+-- handle_new_user() ile otomatik alir).
+INSERT INTO public.bildirim_tercihleri (kullanici_id)
+SELECT id FROM public.kullanicilar
+ON CONFLICT (kullanici_id) DO NOTHING;
+
+-- ------------------------------------------------------------
+-- 15. BÖLGE EŞLEŞMESİ BİLDİRİMİ
+-- Bir ihale admin tarafindan onaylanip yayina girince, calistigi_iller
+-- listesinde o ilin gectigi muteahhitlere "bolgenizde yeni ihale var"
+-- bildirimi gonderilir. (E-posta gonderimi kapsam disi birakildi;
+-- ileride Resend/SendGrid gibi bir servisle ayri bir adimda eklenebilir
+-- -- su an sadece uygulama-ici bildirim.)
+-- ------------------------------------------------------------
+
+-- 'tur' CHECK kisitini 'bolge_eslesmesi' turunu de kabul edecek sekilde
+-- genisletir. Unnamed column CHECK'in varsayilan adi {tablo}_{sutun}_check.
+ALTER TABLE public.bildirimler DROP CONSTRAINT IF EXISTS bildirimler_tur_check;
+ALTER TABLE public.bildirimler ADD CONSTRAINT bildirimler_tur_check CHECK (tur IN (
+  'yeni_teklif', 'ihale_onaylandi', 'ihale_reddedildi', 'ihale_otomatik_sonlandi',
+  'davet_odulu', 'odeme_sorunu', 'bolge_eslesmesi'
+));
+
+CREATE OR REPLACE FUNCTION public.bolge_eslesmesi_bildir()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_muteahhit RECORD;
+BEGIN
+  IF NEW.inceleme_durumu = 'onaylandi' AND OLD.inceleme_durumu IS DISTINCT FROM 'onaylandi' THEN
+    FOR v_muteahhit IN
+      SELECT mp.kullanici_id
+      FROM public.muteahhit_profiller mp
+      WHERE NEW.sehir = ANY(mp.calistigi_iller)
+        AND mp.kullanici_id IS DISTINCT FROM NEW.olusturan_id
+    LOOP
+      IF COALESCE((SELECT bolge_eslesmesi FROM public.bildirim_tercihleri WHERE kullanici_id = v_muteahhit.kullanici_id), true) THEN
+        INSERT INTO public.bildirimler (kullanici_id, tur, baslik, mesaj, ihale_id, link)
+        VALUES (
+          v_muteahhit.kullanici_id, 'bolge_eslesmesi', 'Bölgenizde yeni bir ihale var',
+          NEW.sehir || COALESCE(' / ' || NEW.ilce, '') || ' bölgesinde "' || NEW.baslik || '" başlıklı yeni bir ihale yayınlandı.',
+          NEW.id, '/ihaleler/' || NEW.id
+        );
+      END IF;
+    END LOOP;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_bolge_eslesmesi_bildir ON public.ihaleler;
+CREATE TRIGGER trg_bolge_eslesmesi_bildir
+  AFTER UPDATE ON public.ihaleler
+  FOR EACH ROW EXECUTE FUNCTION public.bolge_eslesmesi_bildir();
+
+-- ------------------------------------------------------------
+-- 16. REALTIME
+-- bildirimler tablosunu Supabase Realtime yayinina ekler (Navbar'daki
+-- zil ikonu canli guncellenebilsin diye). Zaten ekliyse hata vermeden
+-- atlar.
+-- ------------------------------------------------------------
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'bildirimler'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bildirimler;
+  END IF;
+END $$;

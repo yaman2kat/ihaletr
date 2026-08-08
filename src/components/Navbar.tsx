@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import type { HesapTuru } from "@/lib/types";
+import BildirimZili from "./BildirimZili";
 
 const PLAN_BADGE: Record<string, { etiket: string; cls: string }> = {
   ucretsiz: { etiket: "Ücretsiz", cls: "bg-gray-100 text-gray-500" },
@@ -118,6 +119,7 @@ export default function Navbar() {
                     </Link>
                   )}
                 </div>
+                <BildirimZili userId={kullanici.id} />
                 <Link
                   href="/panel"
                   className="text-sm text-blue-700 font-semibold px-4 py-2 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors"
@@ -170,9 +172,12 @@ export default function Navbar() {
             <div className="border-t border-gray-100 pt-3 mt-1 flex flex-col gap-2">
               {authYukleniyor ? null : kullanici ? (
                 <>
-                  <Link href="/panel" onClick={() => setMenuAcik(false)} className="text-gray-800 font-semibold py-2">
-                    Panelim
-                  </Link>
+                  <div className="flex items-center justify-between">
+                    <Link href="/panel" onClick={() => setMenuAcik(false)} className="text-gray-800 font-semibold py-2">
+                      Panelim
+                    </Link>
+                    <BildirimZili userId={kullanici.id} />
+                  </div>
                   <p className="text-xs text-gray-400 px-1">{adSoyad}</p>
                   <button onClick={cikisYap} className="text-left text-red-600 font-medium py-2">
                     Çıkış Yap
