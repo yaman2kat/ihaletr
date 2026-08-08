@@ -154,6 +154,11 @@ export interface Kullanici {
   toplam_teklif_sayisi?: number;
   davet_kodu?: string | null;
   davet_eden_id?: string | null;
+  email_yeni_teklif?: boolean;
+  email_ihale_durumu?: boolean;
+  email_davet_odulu?: boolean;
+  email_odeme_sorunu?: boolean;
+  email_bolge_eslesmesi?: boolean;
   created_at: string;
 }
 

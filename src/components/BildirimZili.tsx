@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Bildirim } from "@/lib/types";
 
+const SON_BILDIRIM_LIMIT = 10;
+
 const TUR_IKON: Record<string, string> = {
   yeni_teklif: "📩",
   ihale_onaylandi: "✅",
@@ -30,22 +32,21 @@ function goreliZaman(iso: string): string {
 export default function BildirimZili({ userId }: { userId: string }) {
   const router = useRouter();
   const [bildirimler, setBildirimler] = useState<Bildirim[]>([]);
+  const [okunmamisSayisi, setOkunmamisSayisi] = useState(0);
   const [acik, setAcik] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(true);
   const kutuRef = useRef<HTMLDivElement>(null);
-
-  const okunmamisSayisi = bildirimler.filter((b) => !b.okundu).length;
 
   useEffect(() => {
     const supabase = createClient();
 
     async function yukle() {
-      const { data } = await supabase
-        .from("bildirimler")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(20);
+      const [{ data }, { count }] = await Promise.all([
+        supabase.from("bildirimler").select("*").order("created_at", { ascending: false }).limit(SON_BILDIRIM_LIMIT),
+        supabase.from("bildirimler").select("*", { count: "exact", head: true }).eq("okundu", false),
+      ]);
       setBildirimler((data ?? []) as Bildirim[]);
+      setOkunmamisSayisi(count ?? 0);
       setYukleniyor(false);
     }
     yukle();
@@ -56,7 +57,8 @@ export default function BildirimZili({ userId }: { userId: string }) {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "bildirimler", filter: `kullanici_id=eq.${userId}` },
         (payload) => {
-          setBildirimler((onceki) => [payload.new as Bildirim, ...onceki].slice(0, 20));
+          setBildirimler((onceki) => [payload.new as Bildirim, ...onceki].slice(0, SON_BILDIRIM_LIMIT));
+          setOkunmamisSayisi((n) => n + 1);
         }
       )
       .subscribe();
@@ -73,17 +75,21 @@ export default function BildirimZili({ userId }: { userId: string }) {
   }, []);
 
   async function okunduIsaretle(id: string) {
+    const zatenOkunmus = bildirimler.find((b) => b.id === id)?.okundu;
     setBildirimler((onceki) => onceki.map((b) => (b.id === id ? { ...b, okundu: true } : b)));
+    if (!zatenOkunmus) setOkunmamisSayisi((n) => Math.max(0, n - 1));
     const supabase = createClient();
     await supabase.from("bildirimler").update({ okundu: true }).eq("id", id);
   }
 
   async function tumunuOkunduIsaretle() {
-    const okunmamislar = bildirimler.filter((b) => !b.okundu).map((b) => b.id);
-    if (okunmamislar.length === 0) return;
+    if (okunmamisSayisi === 0) return;
     setBildirimler((onceki) => onceki.map((b) => ({ ...b, okundu: true })));
+    setOkunmamisSayisi(0);
     const supabase = createClient();
-    await supabase.from("bildirimler").update({ okundu: true }).in("id", okunmamislar);
+    // Yalnizca gorunen 10 tanesini degil, kullanicinin TUM okunmamis
+    // bildirimlerini isaretler.
+    await supabase.from("bildirimler").update({ okundu: true }).eq("kullanici_id", userId).eq("okundu", false);
   }
 
   async function bildirimeTikla(b: Bildirim) {
@@ -154,6 +160,14 @@ export default function BildirimZili({ userId }: { userId: string }) {
               ))
             )}
           </div>
+
+          <Link
+            href="/bildirimler"
+            onClick={() => setAcik(false)}
+            className="text-center text-sm font-medium text-blue-700 hover:bg-blue-50 py-3 border-t border-gray-100 transition-colors"
+          >
+            Tümünü Gör
+          </Link>
         </div>
       )}
     </div>

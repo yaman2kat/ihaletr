@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { BildirimTercihleri } from "@/lib/types";
+import type { BildirimTercihleri, Kullanici } from "@/lib/types";
 
 const SECENEKLER: { alan: keyof Omit<BildirimTercihleri, "kullanici_id" | "updated_at">; baslik: string; aciklama: string }[] = [
   { alan: "yeni_teklif", baslik: "Yeni teklif alındı", aciklama: "İhalenize yeni bir teklif verildiğinde bildirim al." },
@@ -14,10 +14,21 @@ const SECENEKLER: { alan: keyof Omit<BildirimTercihleri, "kullanici_id" | "updat
   { alan: "bolge_eslesmesi", baslik: "Bölgenizde yeni ihale", aciklama: "Çalıştığınız illerden birinde yeni bir ihale onaylanıp yayınlandığında bildirim al (müteahhitler için)." },
 ];
 
+type EmailAlan = "email_yeni_teklif" | "email_ihale_durumu" | "email_davet_odulu" | "email_odeme_sorunu" | "email_bolge_eslesmesi";
+
+const EMAIL_SECENEKLER: { alan: EmailAlan; baslik: string; aciklama: string }[] = [
+  { alan: "email_yeni_teklif", baslik: "Yeni teklif alındı", aciklama: "İhalenize yeni bir teklif verildiğinde e-posta al." },
+  { alan: "email_ihale_durumu", baslik: "İhale durumu (onay/red/otomatik sonlandırma)", aciklama: "İhaleniz onaylandığında, reddedildiğinde ya da otomatik sonlandırıldığında e-posta al." },
+  { alan: "email_davet_odulu", baslik: "Davet ödülü", aciklama: "Davet ettiğiniz biri kayıt olup ödül kazandırdığında e-posta al." },
+  { alan: "email_odeme_sorunu", baslik: "Ödeme sorunu", aciklama: "Ödemeniz alınıp hesabınıza yansıtılamadığında e-posta al." },
+  { alan: "email_bolge_eslesmesi", baslik: "Bölgenizde yeni ihale", aciklama: "Çalıştığınız illerden birinde yeni bir ihale yayınlandığında e-posta al (müteahhitler için)." },
+];
+
 export default function BildirimAyarlari() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [tercihler, setTercihler] = useState<BildirimTercihleri | null>(null);
+  const [emailTercihler, setEmailTercihler] = useState<Pick<Kullanici, EmailAlan> | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [kaydediliyor, setKaydediliyor] = useState<string | null>(null);
   const [hata, setHata] = useState("");
@@ -29,7 +40,14 @@ export default function BildirimAyarlari() {
       if (!session?.user) { router.replace("/giris?next=" + encodeURIComponent("/panel/bildirim-ayarlari")); return; }
       setUserId(session.user.id);
 
-      const { data } = await supabase.from("bildirim_tercihleri").select("*").eq("kullanici_id", session.user.id).maybeSingle();
+      const [{ data }, { data: kullanici }] = await Promise.all([
+        supabase.from("bildirim_tercihleri").select("*").eq("kullanici_id", session.user.id).maybeSingle(),
+        supabase
+          .from("kullanicilar")
+          .select("email_yeni_teklif, email_ihale_durumu, email_davet_odulu, email_odeme_sorunu, email_bolge_eslesmesi")
+          .eq("id", session.user.id)
+          .single(),
+      ]);
       if (data) {
         setTercihler(data as BildirimTercihleri);
       } else {
@@ -42,6 +60,7 @@ export default function BildirimAyarlari() {
           .single();
         setTercihler(yeni as BildirimTercihleri);
       }
+      if (kullanici) setEmailTercihler(kullanici as Pick<Kullanici, EmailAlan>);
       setYukleniyor(false);
     }
     yukle();
@@ -63,7 +82,23 @@ export default function BildirimAyarlari() {
     }
   }
 
-  if (yukleniyor || !tercihler) {
+  async function emailDegistir(alan: EmailAlan) {
+    if (!emailTercihler || !userId) return;
+    const yeniDeger = !emailTercihler[alan];
+    setEmailTercihler({ ...emailTercihler, [alan]: yeniDeger });
+    setKaydediliyor(alan);
+    setHata("");
+
+    const supabase = createClient();
+    const { error } = await supabase.from("kullanicilar").update({ [alan]: yeniDeger }).eq("id", userId);
+    setKaydediliyor(null);
+    if (error) {
+      setEmailTercihler((t) => (t ? { ...t, [alan]: !yeniDeger } : t));
+      setHata("Kaydedilemedi: " + error.message);
+    }
+  }
+
+  if (yukleniyor || !tercihler || !emailTercihler) {
     return (
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
         <div className="h-8 bg-gray-100 rounded w-48 mb-6 animate-pulse" />
@@ -105,6 +140,34 @@ export default function BildirimAyarlari() {
                 aria-label={s.baslik}
                 disabled={kaydediliyor === s.alan}
                 onClick={() => degistir(s.alan)}
+                className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-50 ${aktif ? "bg-blue-700" : "bg-gray-200"}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${aktif ? "translate-x-5" : ""}`} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <h2 className="text-lg font-bold text-gray-900 mt-10 mb-1">E-posta Bildirimleri</h2>
+      <p className="text-gray-500 text-sm mb-6">Hangi olaylarda e-posta almak istediğinizi seçin.</p>
+
+      <div className="flex flex-col gap-3">
+        {EMAIL_SECENEKLER.map((s) => {
+          const aktif = emailTercihler[s.alan];
+          return (
+            <div key={s.alan} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900">{s.baslik}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{s.aciklama}</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={aktif}
+                aria-label={s.baslik}
+                disabled={kaydediliyor === s.alan}
+                onClick={() => emailDegistir(s.alan)}
                 className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-50 ${aktif ? "bg-blue-700" : "bg-gray-200"}`}
               >
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${aktif ? "translate-x-5" : ""}`} />

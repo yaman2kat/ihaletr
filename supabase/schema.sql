@@ -682,6 +682,17 @@ ALTER TABLE public.kullanicilar
   ADD COLUMN IF NOT EXISTS kalan_teklif_hakki    integer NOT NULL DEFAULT 2,
   ADD COLUMN IF NOT EXISTS toplam_teklif_sayisi  integer NOT NULL DEFAULT 0;
 
+-- E-posta bildirim tercihleri (in-app bildirim_tercihleri'nden ayri;
+-- hangi olaylarda e-posta almak istedigini tutar). Su asamada yalnizca
+-- SAKLANIR -- gercek e-posta gonderimi (Resend/SendGrid) ayri bir
+-- turda eklenecek, bu sutunlar o zaman gate olarak kullanilacak.
+ALTER TABLE public.kullanicilar
+  ADD COLUMN IF NOT EXISTS email_yeni_teklif      boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS email_ihale_durumu     boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS email_davet_odulu      boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS email_odeme_sorunu     boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS email_bolge_eslesmesi  boolean NOT NULL DEFAULT true;
+
 -- Teklif eklenince kalan hakkı azalt ve toplam sayıyı artır
 -- 99999+ değer sınırsız paket göstergesidir (Pro)
 CREATE OR REPLACE FUNCTION public.guncelle_kullanici_teklif_hakki()
@@ -1475,7 +1486,18 @@ BEGIN
       WHERE NEW.sehir = ANY(mp.calistigi_iller)
         AND mp.kullanici_id IS DISTINCT FROM NEW.olusturan_id
     LOOP
-      IF COALESCE((SELECT bolge_eslesmesi FROM public.bildirim_tercihleri WHERE kullanici_id = v_muteahhit.kullanici_id), true) THEN
+      IF COALESCE((SELECT bolge_eslesmesi FROM public.bildirim_tercihleri WHERE kullanici_id = v_muteahhit.kullanici_id), true)
+         -- Ana koruma zaten OLD/NEW gecisidir (trigger yalnizca ilk kez
+         -- "onaylandi" olunca calisir), ama ekstra guvence olarak: ayni
+         -- ihale + ayni muteahhit + ayni tur icin daha once bildirim
+         -- olusturulmuşsa tekrar eklenmez.
+         AND NOT EXISTS (
+           SELECT 1 FROM public.bildirimler
+           WHERE kullanici_id = v_muteahhit.kullanici_id
+             AND ihale_id = NEW.id
+             AND tur = 'bolge_eslesmesi'
+         )
+      THEN
         INSERT INTO public.bildirimler (kullanici_id, tur, baslik, mesaj, ihale_id, link)
         VALUES (
           v_muteahhit.kullanici_id, 'bolge_eslesmesi', 'Bölgenizde yeni bir ihale var',
