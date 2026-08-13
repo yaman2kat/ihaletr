@@ -68,6 +68,12 @@ export default function Navbar() {
   // Henüz session kontrol edilmedi — auth alanını boş bırak (flash önleme)
   const authYukleniyor = kullanici === undefined;
 
+  // "İhale Oluştur" yalnızca arsa sahibi / her ikisi hesap türüne gösterilir;
+  // saf müteahhit hesaplarına ve girişsiz ziyaretçilere hiç gösterilmez.
+  // Profil (hesapTuru) henüz yüklenmemişse de gizli kalır (yanlış hesap
+  // türüne kısa süreliğine bile gösterilmesin diye).
+  const ihaleOlusturGoster = !!kullanici && (hesapTuru === "arsa_sahibi" || hesapTuru === "her_ikisi");
+
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -80,7 +86,9 @@ export default function Navbar() {
           {/* Masaüstü Nav Linkleri */}
           <div className="hidden md:flex items-center gap-8">
             <Link href="/ihaleler"      className="text-gray-600 hover:text-blue-700 font-medium transition-colors">İhaleler</Link>
-            <Link href="/ihale-olustur" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">İhale Oluştur</Link>
+            {ihaleOlusturGoster && (
+              <Link href="/ihale-olustur" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">İhale Oluştur</Link>
+            )}
             <Link href="/muteahhitler"  className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Müteahhitler</Link>
             <Link href="/danismanlar"   className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Destek</Link>
           </div>
@@ -164,7 +172,9 @@ export default function Navbar() {
         {menuAcik && (
           <div className="md:hidden pb-4 border-t border-gray-100 mt-2 pt-4 flex flex-col gap-3">
             <Link href="/ihaleler"      className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>İhaleler</Link>
-            <Link href="/ihale-olustur" className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>İhale Oluştur</Link>
+            {ihaleOlusturGoster && (
+              <Link href="/ihale-olustur" className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>İhale Oluştur</Link>
+            )}
             <Link href="/muteahhitler"  className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Müteahhitler</Link>
             <Link href="/danismanlar"   className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Destek</Link>
             <Link href="/premium"       className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Premium</Link>

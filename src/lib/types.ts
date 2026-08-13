@@ -123,6 +123,7 @@ export interface Ihale {
   sehir: string;
   ilce?: string;
   mahalle?: string;
+  cadde_sokak?: string;
   ada_no?: string;
   parsel_no?: string;
   yapi_insaat_ruhsati?: "var" | "yok";

@@ -70,7 +70,7 @@ export default function IhaleOlustur() {
   const [planTuru, setPlanTuru] = useState<string>("ucretsiz");
   const [form, setForm] = useState({
     baslik: "", kategori: "", aciklama: "",
-    kurum: "", sehir: "", ilce: "", mahalle: "", adaNo: "", parselNo: "", yuzolcumuM2: "",
+    kurum: "", sehir: "", ilce: "", mahalle: "", caddeSokak: "", adaNo: "", parselNo: "", yuzolcumuM2: "",
     baslangicFiyati: "", bitisTarihi: "",
     yapiInsaatRuhsati: "" as "" | "var" | "yok",
     proje: "" as "" | "var" | "yok",
@@ -160,6 +160,7 @@ export default function IhaleOlustur() {
     if (!form.sehir)                  eksik.push("Şehir");
     if (!form.ilce.trim())            eksik.push("İlçe");
     if (!form.mahalle.trim())         eksik.push("Mahalle");
+    if (!form.caddeSokak.trim())      eksik.push("Cadde/Sokak");
     if (!form.adaNo.trim())           eksik.push("Ada No");
     if (!form.parselNo.trim())        eksik.push("Parsel No");
     if (!form.yuzolcumuM2)            eksik.push("Yüzölçümü (m²)");
@@ -214,6 +215,7 @@ export default function IhaleOlustur() {
         sehir:            form.sehir,
         ilce:             form.ilce,
         mahalle:          form.mahalle,
+        cadde_sokak:      form.caddeSokak,
         ada_no:           form.adaNo,
         parsel_no:        form.parselNo,
         yuzolcumu_m2:     Number(form.yuzolcumuM2),
@@ -482,6 +484,16 @@ export default function IhaleOlustur() {
                 <input
                   type="text" required placeholder="Örn: Caferağa"
                   value={form.mahalle} onChange={(e) => guncelle("mahalle", e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Cadde/Sokak <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text" required placeholder="Örn: Bahariye Caddesi"
+                  value={form.caddeSokak} onChange={(e) => guncelle("caddeSokak", e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 />
               </div>

@@ -142,18 +142,21 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
             </div>
 
             {/* İstatistikler */}
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="bg-blue-50 rounded-xl p-3">
-                <p className="text-xl font-bold text-blue-700">{profil.tamamlanan_proje_sayisi}</p>
-                <p className="text-xs text-gray-500 leading-tight">Tamamlanan Proje</p>
+            <div className="grid grid-cols-3 gap-1.5 text-center">
+              <div className="bg-blue-50 rounded-xl p-2 min-w-0">
+                <p className="text-lg font-bold text-blue-700">{profil.tamamlanan_proje_sayisi}</p>
+                <p className="text-[9px] text-gray-500 leading-tight">Tamamlanan</p>
+                <p className="text-[9px] text-gray-500 leading-tight">Proje</p>
               </div>
-              <div className="bg-green-50 rounded-xl p-3">
-                <p className="text-xl font-bold text-green-700">{profil.kazanilan_ihale_sayisi}</p>
-                <p className="text-xs text-gray-500 leading-tight">Kazanılan İhale</p>
+              <div className="bg-green-50 rounded-xl p-2 min-w-0">
+                <p className="text-lg font-bold text-green-700">{profil.kazanilan_ihale_sayisi}</p>
+                <p className="text-[9px] text-gray-500 leading-tight">Kazanılan</p>
+                <p className="text-[9px] text-gray-500 leading-tight">İhale</p>
               </div>
-              <div className="bg-orange-50 rounded-xl p-3">
-                <p className="text-xl font-bold text-orange-600">{profil.aktif_ihale_sayisi}</p>
-                <p className="text-xs text-gray-500 leading-tight">Aktif İhale</p>
+              <div className="bg-orange-50 rounded-xl p-2 min-w-0">
+                <p className="text-lg font-bold text-orange-600">{profil.aktif_ihale_sayisi}</p>
+                <p className="text-[9px] text-gray-500 leading-tight">Aktif</p>
+                <p className="text-[9px] text-gray-500 leading-tight">İhale</p>
               </div>
             </div>
 

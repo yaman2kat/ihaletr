@@ -299,6 +299,14 @@ export default async function IhaleDetay({
                 <p className="font-semibold text-gray-900 text-sm">{ihale.ilce ?? "—"}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Mahalle</p>
+                <p className="font-semibold text-gray-900 text-sm">{ihale.mahalle ?? "—"}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Cadde/Sokak</p>
+                <p className="font-semibold text-gray-900 text-sm">{ihale.cadde_sokak ?? "—"}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-400 mb-1">Ada No</p>
                 <p className="font-semibold text-gray-900 text-sm">{ihale.ada_no ?? "—"}</p>
               </div>
