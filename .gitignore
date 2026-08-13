@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .claude/
+
+# test hesap kimlik bilgileri (seed-live-test.mjs tarafindan uretilir)
+live-test-account.json
