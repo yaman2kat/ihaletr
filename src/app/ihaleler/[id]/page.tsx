@@ -72,6 +72,21 @@ export default async function IhaleDetay({
   const ihale: Ihale | undefined = dbIhale ? (dbIhale as Ihale) : mockIhaleler.find((i) => i.id === id);
   if (!ihale) notFound();
 
+  // "Belge Durumu" kartındaki "Proje: Var" rozetini doğrudan dosyaya
+  // bağlamak için — herkese açık (RLS: tur='proje' tapu gibi hassas
+  // türlerden değil) bina projesi belgesi.
+  let projeBelgeUrl: string | null = null;
+  if (dbIhale && ihale.proje === "var") {
+    const { data: projeBelge } = await supabase
+      .from("belgeler")
+      .select("dosya_url")
+      .eq("ihale_id", id)
+      .eq("tur", "proje")
+      .limit(1)
+      .maybeSingle();
+    projeBelgeUrl = projeBelge?.dosya_url ?? null;
+  }
+
   const kalanGun = Math.ceil(
     (new Date(ihale.bitis_tarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
@@ -243,11 +258,22 @@ export default async function IhaleDetay({
                 {ihale.proje && (
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-xs text-gray-400 mb-1">Proje</p>
-                    <p className={`font-semibold text-sm ${
-                      ihale.proje === "var" ? "text-green-700" : "text-red-600"
-                    }`}>
-                      {ihale.proje === "var" ? "✓ Var" : "✗ Yok"}
-                    </p>
+                    {projeBelgeUrl ? (
+                      <a
+                        href={projeBelgeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-sm text-green-700 hover:underline inline-flex items-center gap-1"
+                      >
+                        ✓ Var — Dosyayı Görüntüle
+                      </a>
+                    ) : (
+                      <p className={`font-semibold text-sm ${
+                        ihale.proje === "var" ? "text-green-700" : "text-red-600"
+                      }`}>
+                        {ihale.proje === "var" ? "✓ Var" : "✗ Yok"}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

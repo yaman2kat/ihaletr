@@ -302,7 +302,10 @@ export default function IhaleOlustur() {
     };
 
     const sonuclar = await Promise.allSettled([
-      dosyaYukle(dosyalar.sartname, "proje",   "Yapı Şartnamesi"),
+      // "proje" turu yalnizca gercek bina projesi dosyasina ait olsun diye
+      // (asagida ihale detay sayfasindaki "Proje: Var" rozeti bu turu
+      // sorgulayarak dosyaya dogrudan baglaniyor) sartname "diger" ile etiketlenir.
+      dosyaYukle(dosyalar.sartname, "diger",   "Yapı Şartnamesi"),
       dosyaYukle(dosyalar.sozlesme, "sozlesme", "Sözleşme Tasarısı"),
       dosyaYukle(dosyalar.proje,    "proje",    "Bina Projesi"),
       gizliBelgeYukle(dosyalar.tapu,         "tapu",           "Tapu Fotokopisi",                     "tapu"),
