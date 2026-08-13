@@ -252,7 +252,7 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                           )}
                           {ihale.inceleme_durumu === "beklemede" && (
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                              İnceleniyor
+                              İnceleme Aşamasında
                             </span>
                           )}
                           {yaklasiyor && (

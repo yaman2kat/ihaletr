@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo, Suspense } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import IhaleKarti from "@/components/IhaleKarti";
 import { mockIhaleler } from "@/lib/mock-data";
-import { IhaleDurumu } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+import { IhaleDurumu, type Ihale } from "@/lib/types";
 
 const KATEGORILER = [
   "Tümü",
@@ -30,9 +31,24 @@ function IhalelerIcerik() {
   const [secilenKategori, setSecilenKategori] = useState(baslangicKategori);
   const [secilenDurum,    setSecilenDurum]    = useState("tumu");
   const [siralama,        setSiralama]        = useState("yeni");
+  const [dbIhaleler,      setDbIhaleler]      = useState<Ihale[]>([]);
+
+  // Genel listede yalnizca admin incelemesinden gecmis (onaylandi) gercek
+  // ihaleler gorunur -- beklemede/reddedildi olanlar RLS tarafindan zaten
+  // bu sorgudan hariç tutulur, burada ayrica filtrelemek ek bir guvenlik
+  // katmani saglar (bkz. ihale_gorunurluk_migration.sql).
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("ihaleler")
+      .select("*")
+      .eq("inceleme_durumu", "onaylandi")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setDbIhaleler((data ?? []) as Ihale[]));
+  }, []);
 
   const filtreliIhaleler = useMemo(() => {
-    let sonuc = [...mockIhaleler];
+    let sonuc = [...dbIhaleler, ...mockIhaleler];
 
     if (arama.trim()) {
       const k = arama.toLowerCase();
@@ -63,7 +79,7 @@ function IhalelerIcerik() {
     }
 
     return sonuc;
-  }, [arama, secilenKategori, secilenDurum, siralama]);
+  }, [dbIhaleler, arama, secilenKategori, secilenDurum, siralama]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
