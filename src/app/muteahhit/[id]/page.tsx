@@ -82,6 +82,27 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
     ? profil.sertifika_bilgisi.split("·").map((s) => s.trim()).filter(Boolean)
     : [];
 
+  // "Profili Düzenle" butonu yalnızca profilin sahibine ve admin rolüne
+  // gösterilir; demo/mock profillerde (m1/m2/m3) sahiplik kavramı
+  // olmadığından herkese açık bırakılır (bkz. duzenle/page.tsx'teki aynı
+  // mock istisnası).
+  let duzenlemeYetkisiVar = ["m1", "m2", "m3"].includes(profil.kullanici_id);
+  if (!duzenlemeYetkisiVar) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      if (session.user.id === profil.kullanici_id) {
+        duzenlemeYetkisiVar = true;
+      } else {
+        const { data: oturumKullanici } = await supabase
+          .from("kullanicilar")
+          .select("rol")
+          .eq("id", session.user.id)
+          .maybeSingle();
+        duzenlemeYetkisiVar = oturumKullanici?.rol === "admin";
+      }
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       {/* Breadcrumb */}
@@ -202,17 +223,19 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
               )}
             </div>
 
-            {/* Profil Düzenle */}
-            <Link
-              href={`/muteahhit/${id}/duzenle`}
-              className="w-full flex items-center justify-center gap-2 border border-gray-200 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              Profili Düzenle
-            </Link>
+            {/* Profil Düzenle — yalnızca profil sahibi ve admin görür */}
+            {duzenlemeYetkisiVar && (
+              <Link
+                href={`/muteahhit/${id}/duzenle`}
+                className="w-full flex items-center justify-center gap-2 border border-gray-200 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Profili Düzenle
+              </Link>
+            )}
           </div>
         </div>
 

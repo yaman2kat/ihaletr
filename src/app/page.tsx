@@ -31,7 +31,7 @@ export default function AnaSayfa() {
             <span className="text-blue-200">İnşaat İhale Platformu</span>
           </h1>
           <p className="text-lg text-blue-100 mb-10 max-w-2xl mx-auto">
-            Kamu ve özel sektör inşaat ihalelerini tek platformda takip edin. Bağımsız destek hizmetiyle güvenli, şeffaf ihale süreci.
+            Arsa sahiplerini ve müteahhitleri tek platformda buluşturuyoruz. Bağımsız destek hizmetiyle güvenli, şeffaf ihale süreci.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link

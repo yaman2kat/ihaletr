@@ -17,6 +17,14 @@ const durumEtiket: Record<string, string> = {
   iptal: "İptal",
 };
 
+// "Aktif" ihalelerde durum rozeti yerine bitiş tarihine göre geri sayım
+// gösterilir: 3 günden az kalanlar turuncu, süresi dolanlar gri/sarı.
+function aktifRozet(kalanGun: number): { etiket: string; cls: string } {
+  if (kalanGun <= 0) return { etiket: "Süresi Doldu", cls: "bg-gray-100 text-gray-600" };
+  if (kalanGun < 3) return { etiket: `${kalanGun} gün kaldı`, cls: "bg-amber-100 text-amber-700" };
+  return { etiket: `${kalanGun} gün kaldı`, cls: "bg-green-100 text-green-800" };
+}
+
 function formatPara(tutar: number): string {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
@@ -39,14 +47,17 @@ export default function IhaleKarti({ ihale }: { ihale: Ihale }) {
   );
   const bittiMi = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
   const teklifler = mockIhaleTeklifleri[ihale.id] ?? [];
+  const rozet = ihale.durum === "aktif"
+    ? aktifRozet(kalanGun)
+    : { etiket: durumEtiket[ihale.durum], cls: durumRenk[ihale.durum] };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col gap-4">
       <div className="flex items-start justify-between gap-2">
         <span
-          className={`text-xs font-semibold px-2.5 py-1 rounded-full ${durumRenk[ihale.durum]}`}
+          className={`text-xs font-semibold px-2.5 py-1 rounded-full ${rozet.cls}`}
         >
-          {durumEtiket[ihale.durum]}
+          {rozet.etiket}
         </span>
         <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-full">
           {ihale.kategori}

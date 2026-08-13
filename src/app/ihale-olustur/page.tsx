@@ -442,7 +442,7 @@ export default function IhaleOlustur() {
                 Kurum / Firma <span className="text-red-500">*</span>
               </label>
               <input
-                type="text" required placeholder="ABC Belediyesi"
+                type="text" required placeholder="Yılmaz İnşaat A.Ş."
                 value={form.kurum} onChange={(e) => guncelle("kurum", e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />

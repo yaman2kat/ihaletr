@@ -74,12 +74,19 @@ export default function MuteahhitDuzenle() {
 
       if (!profil) { router.push("/"); return; }
 
-      // Sahiplik kontrolü (mock modda atla)
+      // Sahiplik kontrolü (mock modda atla) — sahibi ya da admin degilse erisim yok.
       if (profil.kullanici_id !== "m1" && profil.kullanici_id !== "m2" && profil.kullanici_id !== "m3") {
         if (session.user.id !== profil.kullanici_id) {
-          setYetkisiz(true);
-          setYukleniyor(false);
-          return;
+          const { data: oturumKullanici } = await supabase
+            .from("kullanicilar")
+            .select("rol")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          if (oturumKullanici?.rol !== "admin") {
+            setYetkisiz(true);
+            setYukleniyor(false);
+            return;
+          }
         }
       }
 

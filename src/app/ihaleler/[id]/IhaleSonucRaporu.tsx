@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   Bar,
@@ -372,7 +373,12 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
         İhale Sonucunu Göster
       </button>
 
-      {acikMi && (
+      {acikMi && createPortal(
+        // Portal ile dogrudan document.body altina render edilir --
+        // aksi halde bu bilesen sag sutundaki "sticky top-20" konteynerin
+        // icinde kaldigi icin (sticky yeni bir stacking context olusturur),
+        // fixed modal z-50 olsa bile navbar'in (da z-50, ama root
+        // seviyesinde) ALTINDA kalip ust kismi kesiliyordu.
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             {/* Başlık + indirme butonları */}
@@ -469,7 +475,8 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

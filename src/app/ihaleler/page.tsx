@@ -22,6 +22,18 @@ const DURUMLAR: { deger: string; etiket: string }[] = [
   { deger: "tamamlandi", etiket: "Tamamlandı"   },
 ];
 
+// Secilen siralamadan bagimsiz olarak (her zaman) sona atilacak "bitmis"
+// ihaleler: iptal/tamamlandi olarak isaretlenmis olanlar ya da suresi
+// gecmis aktif ihaleler.
+function ihaleBitmisMi(ihale: Ihale): boolean {
+  if (ihale.durum === "tamamlandi" || ihale.durum === "iptal") return true;
+  if (ihale.durum === "aktif") {
+    const kalanGun = Math.ceil((new Date(ihale.bitis_tarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return kalanGun <= 0;
+  }
+  return false;
+}
+
 function IhalelerIcerik() {
   const searchParams = useSearchParams();
   const urlKategori = searchParams.get("kategori") ?? "";
@@ -30,7 +42,7 @@ function IhalelerIcerik() {
   const [arama,           setArama]           = useState("");
   const [secilenKategori, setSecilenKategori] = useState(baslangicKategori);
   const [secilenDurum,    setSecilenDurum]    = useState("tumu");
-  const [siralama,        setSiralama]        = useState("yeni");
+  const [siralama,        setSiralama]        = useState("bitis");
   const [dbIhaleler,      setDbIhaleler]      = useState<Ihale[]>([]);
 
   // Genel listede yalnizca admin incelemesinden gecmis (onaylandi) gercek
@@ -77,6 +89,10 @@ function IhalelerIcerik() {
     } else if (siralama === "fiyat-azalan") {
       sonuc.sort((a, b) => b.baslangic_fiyati - a.baslangic_fiyati);
     }
+
+    // Secilen siralama ne olursa olsun, suresi dolmus/tamamlanmis/iptal
+    // ihaleler her zaman en altta gosterilir.
+    sonuc = [...sonuc.filter((i) => !ihaleBitmisMi(i)), ...sonuc.filter(ihaleBitmisMi)];
 
     return sonuc;
   }, [dbIhaleler, arama, secilenKategori, secilenDurum, siralama]);

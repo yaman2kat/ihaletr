@@ -59,11 +59,6 @@ export default function SonTeklifler({ teklifler, toplamSayi, ihaleId, sayfa = 1
               <p className="text-sm font-medium text-gray-800">{t.kullanici_adi}</p>
               <p className="text-xs text-gray-400">{formatTarihSaat(t.tarih)}</p>
             </div>
-            <div className="flex-shrink-0">
-              <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-1 rounded-lg">
-                Gizli
-              </span>
-            </div>
           </div>
         ))}
       </div>
