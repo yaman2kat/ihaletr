@@ -159,6 +159,7 @@ export interface Kullanici {
   email_davet_odulu?: boolean;
   email_odeme_sorunu?: boolean;
   email_bolge_eslesmesi?: boolean;
+  email_sure_uyarisi?: boolean;
   created_at: string;
 }
 

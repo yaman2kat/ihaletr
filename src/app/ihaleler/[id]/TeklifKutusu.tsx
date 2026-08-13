@@ -143,6 +143,13 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     setGonderilenTutar(tutarNum);
     setBasarili(true);
     setTutar("");
+
+    // İhale sahibine e-posta bildirimi — akışı bloklamadan (fire-and-forget).
+    fetch("/api/email/yeni-teklif", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ihaleId }),
+    }).catch(() => { /* e-posta gönderilemese de teklif zaten kaydedildi */ });
   }
 
   // İhale aktif değil

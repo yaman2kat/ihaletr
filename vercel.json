@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/cron/sure-uyarisi", "schedule": "0 8 * * *" }
+  ]
+}

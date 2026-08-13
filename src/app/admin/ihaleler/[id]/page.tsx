@@ -138,6 +138,12 @@ export default function AdminIhaleIncele() {
     if (error) { setHata("Onaylanamadı: " + error.message); return; }
     setIhale((i) => (i ? { ...i, inceleme_durumu: "onaylandi", red_sebebi: null } : i));
     setRedFormuAcik(false);
+
+    fetch("/api/email/ihale-durumu", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ihaleId: ihale.id, durum: "onaylandi" }),
+    }).catch(() => { /* e-posta gönderilemese de onay zaten kaydedildi */ });
   }
 
   async function reddet(e: React.FormEvent) {
@@ -155,6 +161,12 @@ export default function AdminIhaleIncele() {
     if (error) { setHata("Reddedilemedi: " + error.message); return; }
     setIhale((i) => (i ? { ...i, inceleme_durumu: "reddedildi", red_sebebi: redSebebi.trim() } : i));
     setRedFormuAcik(false);
+
+    fetch("/api/email/ihale-durumu", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ihaleId: ihale.id, durum: "reddedildi" }),
+    }).catch(() => { /* e-posta gönderilemese de red zaten kaydedildi */ });
   }
 
   if (yetkisiz) {

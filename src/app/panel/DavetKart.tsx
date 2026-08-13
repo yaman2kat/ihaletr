@@ -84,6 +84,12 @@ export default function DavetKart({ userId, onOduluUygulandi }: DavetKartProps) 
     } else {
       setDavetler((p) => p.filter((d) => d.id !== davetId));
       onOduluUygulandi?.();
+
+      fetch("/api/email/davet-odulu", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ davetEdenId: userId, odulTuru: tur, ihaleId }),
+      }).catch(() => { /* e-posta gönderilemese de ödül zaten uygulandı */ });
     }
     setOdulIslemde(null);
   }

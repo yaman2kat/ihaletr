@@ -14,7 +14,7 @@ const SECENEKLER: { alan: keyof Omit<BildirimTercihleri, "kullanici_id" | "updat
   { alan: "bolge_eslesmesi", baslik: "Bölgenizde yeni ihale", aciklama: "Çalıştığınız illerden birinde yeni bir ihale onaylanıp yayınlandığında bildirim al (müteahhitler için)." },
 ];
 
-type EmailAlan = "email_yeni_teklif" | "email_ihale_durumu" | "email_davet_odulu" | "email_odeme_sorunu" | "email_bolge_eslesmesi";
+type EmailAlan = "email_yeni_teklif" | "email_ihale_durumu" | "email_davet_odulu" | "email_odeme_sorunu" | "email_bolge_eslesmesi" | "email_sure_uyarisi";
 
 const EMAIL_SECENEKLER: { alan: EmailAlan; baslik: string; aciklama: string }[] = [
   { alan: "email_yeni_teklif", baslik: "Yeni teklif alındı", aciklama: "İhalenize yeni bir teklif verildiğinde e-posta al." },
@@ -22,6 +22,7 @@ const EMAIL_SECENEKLER: { alan: EmailAlan; baslik: string; aciklama: string }[] 
   { alan: "email_davet_odulu", baslik: "Davet ödülü", aciklama: "Davet ettiğiniz biri kayıt olup ödül kazandırdığında e-posta al." },
   { alan: "email_odeme_sorunu", baslik: "Ödeme sorunu", aciklama: "Ödemeniz alınıp hesabınıza yansıtılamadığında e-posta al." },
   { alan: "email_bolge_eslesmesi", baslik: "Bölgenizde yeni ihale", aciklama: "Çalıştığınız illerden birinde yeni bir ihale yayınlandığında e-posta al (müteahhitler için)." },
+  { alan: "email_sure_uyarisi", baslik: "Süre dolmadan uyarı", aciklama: "İhalenizin son teklif tarihine 48 saatten az kaldığında e-posta al." },
 ];
 
 export default function BildirimAyarlari() {
@@ -44,7 +45,7 @@ export default function BildirimAyarlari() {
         supabase.from("bildirim_tercihleri").select("*").eq("kullanici_id", session.user.id).maybeSingle(),
         supabase
           .from("kullanicilar")
-          .select("email_yeni_teklif, email_ihale_durumu, email_davet_odulu, email_odeme_sorunu, email_bolge_eslesmesi")
+          .select("email_yeni_teklif, email_ihale_durumu, email_davet_odulu, email_odeme_sorunu, email_bolge_eslesmesi, email_sure_uyarisi")
           .eq("id", session.user.id)
           .single(),
       ]);
