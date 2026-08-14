@@ -29,9 +29,16 @@ interface ArsaSahibiPanelProps {
   userId: string;
 }
 
+// İhale devam ederken teklif sayısı disinda hicbir bilgi (kim/ne kadar)
+// ihale sahibine bile gosterilmez; bitince tam erisim acilir.
+function ihaleBitmis(ihale: Ihale): boolean {
+  return ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun(ihale.bitis_tarihi) <= 0);
+}
+
 export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
   const [ihaleler,       setIhaleler]       = useState<Ihale[]>([]);
   const [gelenTeklifler, setGelenTeklifler] = useState<GelenTeklif[]>([]);
+  const [teklifSayilari, setTeklifSayilari] = useState<Record<string, number>>({});
   const [planTuru,       setPlanTuru]       = useState<PlanTuru>("ucretsiz");
   const [yukleniyor,     setYukleniyor]     = useState(true);
   const [sekme,          setSekme]          = useState<Sekme>("ihaleler");
@@ -55,6 +62,14 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
       setIhaleler(ihaleListesi);
 
       const ihaleIdleri = ihaleListesi.map((x) => x.id);
+
+      // Teklif sayisi (kimlik/tutar icermez) herkese acik RPC ile -- ihale
+      // devam ederken bile gorunmesi gereken TEK bilgi bu.
+      if (ihaleIdleri.length > 0) {
+        const { data: sayilar } = await supabase.rpc("ihale_teklif_sayilari", { p_ihale_idler: ihaleIdleri });
+        setTeklifSayilari(Object.fromEntries((sayilar ?? []).map((s: { ihale_id: string; sayi: number }) => [s.ihale_id, s.sayi])));
+      }
+
       if (ihaleIdleri.length > 0) {
         const { data: teklifData } = await supabase
           .from("teklifler")
@@ -92,6 +107,9 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
   }
 
   const aktifIhaleler    = ihaleler.filter((x) => x.durum === "aktif");
+  const gizliTeklifSayisi = ihaleler
+    .filter((x) => !ihaleBitmis(x))
+    .reduce((s, x) => s + (teklifSayilari[x.id] ?? 0), 0);
   const toplamGorunum    = ihaleler.reduce((s, x) => s + (x.goruntulenme_sayisi ?? 0), 0);
   const yaklasanIhaleler = aktifIhaleler.filter((x) => kalanGun(x.bitis_tarihi) < 5);
 
@@ -280,7 +298,7 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                                 d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                             </svg>
-                            {ihale.mevcut_teklif ? "Teklif var" : "Teklif yok"}
+                            {teklifSayilari[ihale.id] ?? 0} teklif
                           </span>
                           <span className="flex items-center gap-1">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -298,8 +316,8 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                       <div className="hidden sm:block text-right flex-shrink-0">
                         <p className="text-xs text-gray-400 mb-0.5">Başlangıç</p>
                         <p className="text-sm font-bold text-gray-900">{paraBirim(ihale.baslangic_fiyati)}</p>
-                        {ihale.mevcut_teklif && (
-                          <p className="text-xs text-green-600 font-medium">{paraBirim(ihale.mevcut_teklif)} tekl.</p>
+                        {ihaleBitmis(ihale) && ihale.mevcut_teklif && (
+                          <p className="text-xs text-green-600 font-medium">{paraBirim(ihale.mevcut_teklif)} en düşük</p>
                         )}
                       </div>
 
@@ -365,6 +383,12 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
       {/* ─── GELEN TEKLİFLER Sekmesi ─── */}
       {sekme === "gelenTeklifler" && (
         <div>
+          {gizliTeklifSayisi > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 text-sm text-blue-700">
+              Aktif ihalelerinize gelen <strong>{gizliTeklifSayisi} teklif</strong> daha var — firma bilgisi ve tutar,
+              ihale süresi dolana kadar (sizin dahil) kimseye gösterilmez.
+            </div>
+          )}
           {gelenTeklifler.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
               <p className="text-3xl mb-3">📬</p>

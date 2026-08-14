@@ -51,6 +51,7 @@ function YildizSec({ puan, onChange }: { puan: number; onChange: (p: number) => 
 
 export default function YorumBolumu({ muteahhitId }: { muteahhitId: string }) {
   const [kullanici, setKullanici] = useState<User | null | undefined>(undefined);
+  const [uygunMu, setUygunMu] = useState<boolean | null>(null);
   const [yorumlar, setYorumlar] = useState<MuteahhitYorum[]>([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [puan, setPuan] = useState(0);
@@ -62,8 +63,21 @@ export default function YorumBolumu({ muteahhitId }: { muteahhitId: string }) {
   useEffect(() => {
     const supabase = createClient();
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setKullanici(session?.user ?? null);
+      if (!session?.user || session.user.id === muteahhitId) { setUygunMu(false); return; }
+
+      // Yorum yazma yetkisi: bu muteahhitle en az bir ihalede birlikte
+      // calisilmis (teklifi kabul edilmis) olmali. RLS zaten teklifler
+      // satirlarini yalnizca ilgili ihalenin sahibine (bitmisse) actigi
+      // icin bu sorgunun sonuc donmesi tek basina yeterlilik kanitidir.
+      const { data } = await supabase
+        .from("teklifler")
+        .select("id")
+        .eq("kullanici_id", muteahhitId)
+        .eq("durum", "kabul_edildi")
+        .limit(1);
+      setUygunMu((data?.length ?? 0) > 0);
     });
 
     async function yorumlarGetir() {
@@ -112,11 +126,16 @@ export default function YorumBolumu({ muteahhitId }: { muteahhitId: string }) {
       yorum_metni: metin.trim(),
     };
 
-    try {
-      const { error } = await supabase.from("muteahhit_yorumlar").insert(yeniYorum);
-      if (error) throw error;
-    } catch {
-      // optimistik güncelleme
+    const { error } = await supabase.from("muteahhit_yorumlar").insert(yeniYorum);
+    setGonderiyor(false);
+
+    if (error) {
+      setHata(
+        error.code === "42501" || error.message?.toLowerCase().includes("row-level security")
+          ? "Yalnızca daha önce bu müteahhitle ihale üzerinden çalışmış (teklifi kabul edilmiş) kullanıcılar değerlendirme bırakabilir."
+          : "Değerlendirme gönderilemedi: " + error.message
+      );
+      return;
     }
 
     const optimistik: MuteahhitYorum = {
@@ -128,7 +147,6 @@ export default function YorumBolumu({ muteahhitId }: { muteahhitId: string }) {
     setPuan(0);
     setMetin("");
     setBasarili(true);
-    setGonderiyor(false);
     setTimeout(() => setBasarili(false), 4000);
   }
 
@@ -149,7 +167,7 @@ export default function YorumBolumu({ muteahhitId }: { muteahhitId: string }) {
         )}
       </div>
 
-      {kullanici && !basarili && (
+      {kullanici && uygunMu && !basarili && (
         <form onSubmit={handleGonder} className="bg-gray-50 rounded-xl p-5 mb-6 border border-gray-100">
           <p className="text-sm font-semibold text-gray-700 mb-3">Değerlendirme Bırak</p>
           <div className="mb-3">
@@ -183,6 +201,12 @@ export default function YorumBolumu({ muteahhitId }: { muteahhitId: string }) {
         <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-4 mb-6 text-sm text-blue-700">
           Değerlendirme bırakmak için{" "}
           <a href="/giris" className="font-semibold underline">giriş yapın</a>.
+        </div>
+      )}
+
+      {kullanici && uygunMu === false && !basarili && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 mb-6 text-sm text-gray-500">
+          Değerlendirme bırakabilmek için bu müteahhitle bir ihale üzerinden daha önce çalışmış (teklifi kabul edilmiş) olmanız gerekir.
         </div>
       )}
 

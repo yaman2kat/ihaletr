@@ -52,17 +52,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `${ihale.baslik} - ${konum} | İhaleTR` };
 }
 
-const TEKLIF_SAYFA_BOYUTU = 20;
-
 export default async function IhaleDetay({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ teklifSayfa?: string }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
 
   // Once gercek veritabanindaki ihaleyi dene; bulunamazsa demo/mock
   // veriye dus (mockIhaleler sabit "1","2"... gibi id'ler kullanir).
@@ -94,63 +89,17 @@ export default async function IhaleDetay({
   // Süresi dolmuş ya da tamamlanmış ihaleler için sonuç raporu gösterilir.
   const sonucGosterilsinMi = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
 
-  let teklifler: MockTeklif[] = mockIhaleTeklifleri[id] ?? [];
+  // Mock/demo ihaleler icin sabit ornek teklif listesi (gercek ihalelerde
+  // teklif veren kimligi/tutari kimseye gosterilmez -- bkz. SonTeklifler,
+  // EnDusukTeklif, IhaleSonucRaporu). Gercek ihalelerde teklif SAYISI ise
+  // RLS'i bilincli atlayan, kimlik/tutar icermeyen herkese acik bir RPC
+  // ile alinir.
+  const teklifler: MockTeklif[] = mockIhaleTeklifleri[id] ?? [];
   let teklifSayisi = teklifler.length;
-  let teklifSayfa = 1;
-  let teklifToplamSayfa = 1;
-
-  // kullanicilar tablosu artik sadece kendi satirini gosterdigi icin
-  // (RLS), teklif verenlerin ad/firma bilgisi ayri bir sorguyla, herkese
-  // acik "kullanicilar_ozet" view'inden (sadece ad_soyad/firma_adi)
-  // cekilip client tarafinda birlestiriliyor.
-  async function eslesenTeklifler(
-    dbTeklifler: { kullanici_id: string; tutar: number; created_at: string }[]
-  ): Promise<MockTeklif[]> {
-    const idler = [...new Set(dbTeklifler.map((t) => t.kullanici_id))];
-    const { data: kullanicilar } = idler.length > 0
-      ? await supabase.from("kullanicilar_ozet").select("id, ad_soyad, firma_adi").in("id", idler)
-      : { data: [] as { id: string; ad_soyad: string; firma_adi: string | null }[] };
-    const harita = new Map((kullanicilar ?? []).map((k) => [k.id, k]));
-    return dbTeklifler.map((t) => {
-      const kullanici = harita.get(t.kullanici_id);
-      return {
-        kullanici_adi: kullanici?.firma_adi || kullanici?.ad_soyad || "Kullanıcı",
-        tarih: t.created_at,
-        tutar: t.tutar,
-        kullanici_id: t.kullanici_id,
-      };
-    });
-  }
 
   if (dbIhale) {
-    if (sonucGosterilsinMi) {
-      // İhale sonuç raporu (sıralama, istatistikler) ve teklif-sahibi erişim
-      // kontrolü tüm teklifleri gerektirir; bu, yalnızca bitmiş ihalelerde
-      // çalışan, sınırlı sayıda ziyaretin olduğu bir yoldur.
-      const { data: dbTeklifler, count } = await supabase
-        .from("teklifler")
-        .select("kullanici_id, tutar, created_at", { count: "exact" })
-        .eq("ihale_id", id)
-        .order("tutar", { ascending: true });
-      teklifler = await eslesenTeklifler(dbTeklifler ?? []);
-      teklifSayisi = count ?? teklifler.length;
-    } else {
-      // İhale devam ederken "Son Teklifler" widget'ı sayfalanır — çok
-      // teklif alan aktif bir ihalede her sayfa görüntülemesinde tüm
-      // teklifleri limitsiz çekmemek için.
-      teklifSayfa = Math.max(1, Number(sp?.teklifSayfa) || 1);
-      const from = (teklifSayfa - 1) * TEKLIF_SAYFA_BOYUTU;
-      const to = from + TEKLIF_SAYFA_BOYUTU - 1;
-      const { data: dbTeklifler, count } = await supabase
-        .from("teklifler")
-        .select("kullanici_id, tutar, created_at", { count: "exact" })
-        .eq("ihale_id", id)
-        .order("tutar", { ascending: true })
-        .range(from, to);
-      teklifler = await eslesenTeklifler(dbTeklifler ?? []);
-      teklifSayisi = count ?? 0;
-      teklifToplamSayfa = Math.max(1, Math.ceil(teklifSayisi / TEKLIF_SAYFA_BOYUTU));
-    }
+    const { data: sayi } = await supabase.rpc("ihale_teklif_sayisi", { p_ihale_id: id });
+    teklifSayisi = sayi ?? 0;
   }
 
   return (
@@ -328,11 +277,9 @@ export default async function IhaleDetay({
 
           {/* Son Teklifler */}
           <SonTeklifler
+            ihaleId={ihale.id}
             teklifler={teklifler}
             toplamSayi={teklifSayisi}
-            ihaleId={ihale.id}
-            sayfa={teklifSayfa}
-            toplamSayfa={teklifToplamSayfa}
           />
 
         </div>
@@ -353,6 +300,7 @@ export default async function IhaleDetay({
               </p>
               <div className="flex flex-col gap-3 mb-5">
                 <EnDusukTeklif
+                  ihaleId={ihale.id}
                   mevcutTeklif={ihale.mevcut_teklif}
                   olusturanId={ihale.olusturan_id}
                   teklifler={teklifler}

@@ -104,6 +104,7 @@ export default function IhaleKarti({ ihale }: { ihale: Ihale }) {
         </div>
         {bittiMi && (
           <EnDusukTeklif
+            ihaleId={ihale.id}
             mevcutTeklif={ihale.mevcut_teklif}
             olusturanId={ihale.olusturan_id}
             teklifler={teklifler}

@@ -28,7 +28,6 @@ export default function RootLayout({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center gap-4">
             <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm">
               <Link href="/ihaleler" className="hover:text-white transition-colors">İhaleler</Link>
-              <Link href="/muteahhitler" className="hover:text-white transition-colors">Müteahhitler</Link>
               <Link href="/danismanlar" className="hover:text-white transition-colors">Destek</Link>
               <Link href="/sss" className="hover:text-white transition-colors">SSS</Link>
               <Link href="/iletisim" className="hover:text-white transition-colors">İletişim</Link>

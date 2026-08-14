@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useTeklifRaporuErisimi } from "@/hooks/useTeklifRaporuErisimi";
+import { useGercekTeklifErisimi } from "@/hooks/useGercekTeklifErisimi";
+import { gercekIhaleIdMi } from "@/lib/ihale-sonuc";
 
 function formatPara(tutar: number): string {
   return new Intl.NumberFormat("tr-TR", {
@@ -10,6 +12,7 @@ function formatPara(tutar: number): string {
 }
 
 interface Props {
+  ihaleId: string;
   mevcutTeklif: number | null;
   olusturanId?: string | null;
   teklifler: { kullanici_id?: string }[];
@@ -17,11 +20,24 @@ interface Props {
   boyut?: "kompakt" | "buyuk";
 }
 
-export default function EnDusukTeklif({ mevcutTeklif, olusturanId, teklifler, bittiMi, boyut = "kompakt" }: Props) {
-  const erisim = useTeklifRaporuErisimi({ olusturanId, teklifler, bittiMi });
+export default function EnDusukTeklif({ ihaleId, mevcutTeklif, olusturanId, teklifler, bittiMi, boyut = "kompakt" }: Props) {
+  const gercekMi = gercekIhaleIdMi(ihaleId);
+
+  // Mock/demo ihaleler icin eski (basit, sahte veri uzerinde calisan) kural;
+  // gercek ihaleler icin RLS/RPC ile gercekten erisim kontrollu veri.
+  const mockErisim = useTeklifRaporuErisimi({ olusturanId, teklifler, bittiMi: gercekMi ? false : bittiMi });
+  const gercekErisim = useGercekTeklifErisimi(ihaleId, bittiMi, olusturanId);
+
+  const erisim = gercekMi
+    ? (gercekErisim.durum === "tam" || gercekErisim.durum === "fiyat" ? "izinli" : gercekErisim.durum === "yukleniyor" ? "yukleniyor" : "kilitli")
+    : mockErisim;
+  const gercekEnDusuk = gercekMi && gercekErisim.fiyatlar.length > 0 ? Math.min(...gercekErisim.fiyatlar) : null;
+  const gosterilecekTutar = gercekMi ? gercekEnDusuk : mevcutTeklif;
 
   const kilitliMesaj = bittiMi
-    ? "Bu bilgiyi görmek için ihaleye teklif vermiş olmalı ya da Kurumsal plana sahip olmalısınız."
+    ? (gercekMi
+        ? "Bu bilgiyi yalnızca ihale sahibi ya da Kurumsal plan kullanıcıları görebilir."
+        : "Bu bilgiyi görmek için ihaleye teklif vermiş olmalı ya da Kurumsal plana sahip olmalısınız.")
     : "İhale devam ederken bu bilgi kimseye gösterilmez — ihale sahibi dahil.";
 
   if (boyut === "buyuk") {
@@ -33,9 +49,9 @@ export default function EnDusukTeklif({ mevcutTeklif, olusturanId, teklifler, bi
         ) : erisim === "izinli" ? (
           <>
             <p className="text-2xl font-bold text-blue-700">
-              {mevcutTeklif ? formatPara(mevcutTeklif) : "—"}
+              {gosterilecekTutar ? formatPara(gosterilecekTutar) : "—"}
             </p>
-            {!mevcutTeklif && (
+            {!gosterilecekTutar && (
               <p className="text-xs text-blue-400 mt-1">Henüz teklif yok</p>
             )}
           </>
@@ -66,7 +82,7 @@ export default function EnDusukTeklif({ mevcutTeklif, olusturanId, teklifler, bi
         <div className="h-5 w-24 bg-gray-100 rounded animate-pulse" />
       ) : erisim === "izinli" ? (
         <p className="font-semibold text-blue-700">
-          {mevcutTeklif ? formatPara(mevcutTeklif) : "Henüz yok"}
+          {gosterilecekTutar ? formatPara(gosterilecekTutar) : "Henüz yok"}
         </p>
       ) : bittiMi ? (
         <Link

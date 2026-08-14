@@ -1,12 +1,26 @@
 import type { PlanTuru } from "./types";
 import { PLAN_MAKS_IHALE_GUNU } from "./plan-limitleri";
 
+const UUID_DESENI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Mock/demo ihalelerin id'leri "1".."6" gibi kisa sabitlerdir; gercek
+// veritabani ihaleleri uuid kullanir. Teklif gizliligi kurallari yalnizca
+// gercek ihalelere uygulanir -- demo veri zaten sahte oldugu icin kisitlama
+// gerektirmez.
+export function gercekIhaleIdMi(id: string): boolean {
+  return UUID_DESENI.test(id);
+}
+
 export interface SonucFirma {
   firmaAdi: string;
   tutar: number;
   muteahhitId?: string;
   ortalamaPuan: number | null;
   yorumSayisi: number;
+  /** Yalnizca gercek ihalelerde, sahibi gorunumunde dolu: teklif satirinin
+   * kullanici_id'si ve mevcut durumu -- "Kazandi olarak isaretle" butonu icin. */
+  kullaniciId?: string;
+  teklifDurumu?: "beklemede" | "kabul_edildi" | "reddedildi";
 }
 
 export interface IhaleSonucVerisi {

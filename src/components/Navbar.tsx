@@ -89,7 +89,6 @@ export default function Navbar() {
             {ihaleOlusturGoster && (
               <Link href="/ihale-olustur" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">İhale Oluştur</Link>
             )}
-            <Link href="/muteahhitler"  className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Müteahhitler</Link>
             <Link href="/danismanlar"   className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Destek</Link>
           </div>
 
@@ -175,7 +174,6 @@ export default function Navbar() {
             {ihaleOlusturGoster && (
               <Link href="/ihale-olustur" className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>İhale Oluştur</Link>
             )}
-            <Link href="/muteahhitler"  className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Müteahhitler</Link>
             <Link href="/danismanlar"   className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Destek</Link>
             <Link href="/premium"       className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Premium</Link>
 
