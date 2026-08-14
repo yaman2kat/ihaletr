@@ -41,6 +41,7 @@ interface Props {
     kurum: string;
     baslangic_tarihi: string;
     bitis_tarihi: string;
+    secilen_firma_id?: string | null;
   };
   teklifler: MockTeklif[];
   olusturanId?: string | null;
@@ -301,37 +302,48 @@ function TeklifGrafigi({ firmalar }: { firmalar: SonucFirma[] }) {
   );
 }
 
-// Ihale sahibinin bitmis ihalede bir teklifi "kazandi" olarak
-// isaretlemesi -- bu, o firmaya yorum yazma yetkisini de acar.
-function KazandiButonu({ ihaleId, kullaniciId, durum }: { ihaleId: string; kullaniciId: string; durum: string }) {
-  const [guncelDurum, setGuncelDurum] = useState(durum);
+// Ihale sahibinin bitmis ihalede bir firmayi kazanan olarak secip
+// ihaleyi resmen kapatmasi. Bu tek islem: teklifin durumunu
+// kabul_edildi/reddedildi yapar (yorum yazma yetkisini acar), kazanan
+// muteahhitin kazanilan ihale sayisini artirir ve ilgili herkese
+// bildirim gonderir (bkz. ihale_kapatildi_bildir trigger'i).
+function SecVeKapatButonu({
+  ihaleId, kullaniciId, firmaAdi, onKapatildi,
+}: { ihaleId: string; kullaniciId: string; firmaAdi: string; onKapatildi: (kullaniciId: string) => void }) {
   const [gonderiliyor, setGonderiliyor] = useState(false);
+  const [hata, setHata] = useState("");
 
-  if (guncelDurum === "kabul_edildi") {
-    return <span className="text-xs font-semibold text-green-700 whitespace-nowrap">✓ Kazandı</span>;
-  }
+  async function kapat() {
+    const onay = window.confirm(
+      `İhaleyi ${firmaAdi} firmasına vermek ve kapatmak istediğinize emin misiniz? Bu işlem geri alınamaz.`
+    );
+    if (!onay) return;
 
-  async function isaretle() {
     setGonderiliyor(true);
+    setHata("");
     const supabase = createClient();
     const { error } = await supabase
-      .from("teklifler")
-      .update({ durum: "kabul_edildi" })
-      .eq("ihale_id", ihaleId)
-      .eq("kullanici_id", kullaniciId);
+      .from("ihaleler")
+      .update({ durum: "tamamlandi", secilen_firma_id: kullaniciId })
+      .eq("id", ihaleId);
     setGonderiliyor(false);
-    if (!error) setGuncelDurum("kabul_edildi");
+
+    if (error) { setHata("İşlem başarısız: " + error.message); return; }
+    onKapatildi(kullaniciId);
   }
 
   return (
-    <button
-      type="button"
-      onClick={isaretle}
-      disabled={gonderiliyor}
-      className="text-xs font-semibold text-gray-500 hover:text-green-700 whitespace-nowrap disabled:opacity-50"
-    >
-      {gonderiliyor ? "…" : "Kazandı olarak işaretle"}
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        onClick={kapat}
+        disabled={gonderiliyor}
+        className="text-xs font-semibold text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors disabled:opacity-50"
+      >
+        {gonderiliyor ? "…" : "Bu Firmayı Seç ve İhaleyi Kapat"}
+      </button>
+      {hata && <span className="text-[11px] text-red-600 whitespace-nowrap">{hata}</span>}
+    </div>
   );
 }
 
@@ -412,6 +424,7 @@ function FiyatSadeceRapor({ fiyatlar }: { fiyatlar: number[] }) {
 
 export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Props) {
   const [acikMi, setAcikMi] = useState(false);
+  const [secilenFirmaId, setSecilenFirmaId] = useState<string | null>(ihale.secilen_firma_id ?? null);
   const gercekMi = gercekIhaleIdMi(ihale.id);
 
   // Mock/demo ihaleler icin eski (basit) kural; gercek ihaleler icin
@@ -566,6 +579,17 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
             </div>
 
             <div className="px-6 py-5 flex flex-col gap-6">
+              {gercekMi && secilenFirmaId && (
+                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2">
+                  <span className="text-lg">🏆</span>
+                  <p className="text-sm font-semibold text-green-800">
+                    İhale{" "}
+                    <strong>{kaynakFirmalar.find((f) => f.kullaniciId === secilenFirmaId)?.firmaAdi ?? "seçilen firma"}</strong>
+                    {" "}firmasına verildi.
+                  </p>
+                </div>
+              )}
+
               {/* Teklif tablosu */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -602,8 +626,16 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
                         </td>
                         {gercekMi && (
                           <td className="py-3">
-                            {f.kullaniciId && f.teklifDurumu && (
-                              <KazandiButonu ihaleId={ihale.id} kullaniciId={f.kullaniciId} durum={f.teklifDurumu} />
+                            {f.kullaniciId && secilenFirmaId === f.kullaniciId && (
+                              <span className="text-xs font-semibold text-green-700 whitespace-nowrap">🏆 Kazandı</span>
+                            )}
+                            {f.kullaniciId && !secilenFirmaId && (
+                              <SecVeKapatButonu
+                                ihaleId={ihale.id}
+                                kullaniciId={f.kullaniciId}
+                                firmaAdi={f.firmaAdi}
+                                onKapatildi={setSecilenFirmaId}
+                              />
                             )}
                           </td>
                         )}

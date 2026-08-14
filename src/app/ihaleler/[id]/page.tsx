@@ -331,6 +331,7 @@ export default async function IhaleDetay({
                   kurum: ihale.kurum,
                   baslangic_tarihi: ihale.baslangic_tarihi,
                   bitis_tarihi: ihale.bitis_tarihi,
+                  secilen_firma_id: ihale.secilen_firma_id,
                 }}
                 teklifler={teklifler}
                 olusturanId={ihale.olusturan_id}

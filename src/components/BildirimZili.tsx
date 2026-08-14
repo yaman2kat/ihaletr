@@ -16,6 +16,9 @@ const TUR_IKON: Record<string, string> = {
   davet_odulu: "🎁",
   odeme_sorunu: "⚠️",
   bolge_eslesmesi: "📍",
+  ihale_kapatildi: "🔒",
+  ihale_kazanildi: "🏆",
+  ihale_kaybedildi: "📭",
 };
 
 function goreliZaman(iso: string): string {

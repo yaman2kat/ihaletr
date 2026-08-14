@@ -138,6 +138,7 @@ export interface Ihale {
   inceleme_durumu?: IncelemeDurumu;
   red_sebebi?: string | null;
   otomatik_sonlandirildi?: boolean;
+  secilen_firma_id?: string | null;
   created_at: string;
 }
 
@@ -188,7 +189,8 @@ export interface Davet {
 
 export type BildirimTuru =
   | "yeni_teklif" | "ihale_onaylandi" | "ihale_reddedildi"
-  | "ihale_otomatik_sonlandi" | "davet_odulu" | "odeme_sorunu" | "bolge_eslesmesi";
+  | "ihale_otomatik_sonlandi" | "davet_odulu" | "odeme_sorunu" | "bolge_eslesmesi"
+  | "ihale_kapatildi" | "ihale_kazanildi" | "ihale_kaybedildi";
 
 export interface Bildirim {
   id: string;
