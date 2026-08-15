@@ -3,26 +3,25 @@ import { Ihale } from "@/lib/types";
 import { mockIhaleTeklifleri } from "@/lib/mock-data";
 import EnDusukTeklif from "@/components/EnDusukTeklif";
 
-const durumRenk: Record<string, string> = {
-  aktif: "bg-green-100 text-green-800",
-  beklemede: "bg-yellow-100 text-yellow-800",
-  tamamlandi: "bg-gray-100 text-gray-700",
-  iptal: "bg-red-100 text-red-800",
-};
+// Durum rozeti mantığı:
+// - Beklemede/İptal: sabit rozet.
+// - Süresi henüz dolmamış aktif ihale: geri sayım (3 günden az turuncu, aksi yeşil).
+// - Süresi dolmuş (aktif+gecmis ya da durum=tamamlandi) AMA kazanan
+//   secilmemis: "Karar Bekleniyor" (turuncu) -- otomatik sonlandirma
+//   kazanan atamadan da durumu tamamlandi yapabildigi icin bu ayrim
+//   sadece durum alanina degil secilen_firma_id'ye bakar.
+// - Süresi dolmus VE kazanan secilmis: "Tamamlandı" (gri).
+function rozetHesapla(ihale: Ihale, kalanGun: number): { etiket: string; cls: string } {
+  if (ihale.durum === "beklemede") return { etiket: "Beklemede", cls: "bg-yellow-100 text-yellow-800" };
+  if (ihale.durum === "iptal") return { etiket: "İptal", cls: "bg-red-100 text-red-800" };
 
-const durumEtiket: Record<string, string> = {
-  aktif: "Aktif",
-  beklemede: "Beklemede",
-  tamamlandi: "Tamamlandı",
-  iptal: "İptal",
-};
-
-// "Aktif" ihalelerde durum rozeti yerine bitiş tarihine göre geri sayım
-// gösterilir: 3 günden az kalanlar turuncu, süresi dolanlar gri/sarı.
-function aktifRozet(kalanGun: number): { etiket: string; cls: string } {
-  if (kalanGun <= 0) return { etiket: "Süresi Doldu", cls: "bg-gray-100 text-gray-600" };
-  if (kalanGun < 3) return { etiket: `${kalanGun} gün kaldı`, cls: "bg-amber-100 text-amber-700" };
-  return { etiket: `${kalanGun} gün kaldı`, cls: "bg-green-100 text-green-800" };
+  const suresiDolmusMu = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
+  if (!suresiDolmusMu) {
+    if (kalanGun < 3) return { etiket: `${kalanGun} gün kaldı`, cls: "bg-amber-100 text-amber-700" };
+    return { etiket: `${kalanGun} gün kaldı`, cls: "bg-green-100 text-green-800" };
+  }
+  if (ihale.secilen_firma_id) return { etiket: "Tamamlandı", cls: "bg-gray-100 text-gray-700" };
+  return { etiket: "Karar Bekleniyor", cls: "bg-amber-100 text-amber-700" };
 }
 
 function formatPara(tutar: number): string {
@@ -41,15 +40,20 @@ function formatTarih(tarih: string): string {
   });
 }
 
-export default function IhaleKarti({ ihale }: { ihale: Ihale }) {
+interface Props {
+  ihale: Ihale;
+  /** Verilirse hesaplanan durum rozetinin yerine gecer (ör. sahibine
+   * ozel "Beklemede - Sadece siz görebilirsiniz" rozeti). */
+  ozelRozet?: { etiket: string; cls: string };
+}
+
+export default function IhaleKarti({ ihale, ozelRozet }: Props) {
   const kalanGun = Math.ceil(
     (new Date(ihale.bitis_tarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
   const bittiMi = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
   const teklifler = mockIhaleTeklifleri[ihale.id] ?? [];
-  const rozet = ihale.durum === "aktif"
-    ? aktifRozet(kalanGun)
-    : { etiket: durumEtiket[ihale.durum], cls: durumRenk[ihale.durum] };
+  const rozet = ozelRozet ?? rozetHesapla(ihale, kalanGun);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col gap-4">

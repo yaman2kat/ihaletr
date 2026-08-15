@@ -3,40 +3,49 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-export type GercekTeklifErisimDurumu = "yukleniyor" | "tam" | "fiyat" | "kilitli";
+export type GercekTeklifErisimDurumu = "yukleniyor" | "tam" | "maskeli" | "kilitli";
 
 export interface TeklifFirma {
-  kullanici_id: string;
+  /** Yalnizca "tam" (ihale sahibi) icin dolu -- "maskeli" satirlar
+   * deanonimlestirmeyi imkansiz kilmak icin hicbir kimlik alani tasimaz. */
+  kullanici_id?: string;
+  muteahhit_id?: string;
   tutar: number;
   kullanici_adi: string;
-  muteahhit_id?: string;
   ortalamaPuan: number | null;
   yorumSayisi: number;
-  durum: "beklemede" | "kabul_edildi" | "reddedildi";
+  durum?: "beklemede" | "kabul_edildi" | "reddedildi";
 }
 
 interface Sonuc {
   durum: GercekTeklifErisimDurumu;
-  fiyatlar: number[];
   firmalar: TeklifFirma[];
+  /** Kazanan teklifin tutari -- yalnizca kazanan secilmisse VE goruntuleyen
+   * yetkiliyse (sahibi/katilimci/kurumsal) dolu. */
+  kazananFiyat: number | null;
+  /** Kimlik icermez -- kilitli goruntude "kazanan secildi ama sen goremezsin"
+   * ile "henuz kazanan yok" ayrimini yapmak icin (CTA gosterme karari). */
+  kazananVarMi: boolean;
 }
 
-const BOS_SONUC: Sonuc = { durum: "kilitli", fiyatlar: [], firmalar: [] };
+const BOS_SONUC: Sonuc = { durum: "kilitli", firmalar: [], kazananFiyat: null, kazananVarMi: false };
 
 /**
  * Gercek (veritabani) ihaleleri icin teklif erisim kurali:
  * - Ihale devam ederken: hic kimse goremez (sahibi dahil) — "kilitli".
  * - Ihale bittikten sonra:
- *   - Ihale sahibi: TAM erisim (firma adi + tutar + profil linki).
- *   - Kurumsal plan (sahibi degilse): SADECE tutarlar (kimlik bilgisi yok).
- *   - Digerleri (katilimcilar dahil): kilitli.
+ *   - Ihale sahibi: TAM erisim (gercek firma adi + tutar + profil linki).
+ *   - Katilimcilar (bu ihaleye teklif vermis olanlar) ve Kurumsal plan
+ *     sahipleri: MASKELI erisim (isimler "Y***** İ***** A.Ş." seklinde
+ *     maskelenir, kullanici_id/profil linki hic donmez).
+ *   - Digerleri: kilitli.
  */
 export function useGercekTeklifErisimi(
   ihaleId: string,
   bittiMi: boolean,
   olusturanId?: string | null
 ): Sonuc {
-  const [sonuc, setSonuc] = useState<Sonuc>({ durum: "yukleniyor", fiyatlar: [], firmalar: [] });
+  const [sonuc, setSonuc] = useState<Sonuc>({ durum: "yukleniyor", firmalar: [], kazananFiyat: null, kazananVarMi: false });
 
   useEffect(() => {
     let iptal = false;
@@ -87,29 +96,53 @@ export function useGercekTeklifErisimi(
           };
         });
 
-        if (!iptal) setSonuc({ durum: "tam", fiyatlar: firmalar.map((f) => f.tutar), firmalar });
-        return;
-      }
-
-      let kurumsalMi = false;
-      if (uid) {
-        const { data } = await supabase.from("kullanicilar").select("plan_turu").eq("id", uid).maybeSingle();
-        kurumsalMi = data?.plan_turu === "kurumsal";
-      }
-
-      if (kurumsalMi) {
-        const { data: fiyatlar } = await supabase.rpc("ihale_teklif_fiyatlari", { p_ihale_id: ihaleId });
+        const kazanan = firmalar.find((f) => f.durum === "kabul_edildi");
         if (!iptal) {
           setSonuc({
-            durum: "fiyat",
-            fiyatlar: (fiyatlar ?? []).map((r: { tutar: number }) => r.tutar),
-            firmalar: [],
+            durum: "tam",
+            firmalar,
+            kazananFiyat: kazanan?.tutar ?? null,
+            kazananVarMi: !!kazanan,
           });
         }
         return;
       }
 
-      if (!iptal) setSonuc(BOS_SONUC);
+      let maskeliMi = false;
+      if (uid) {
+        if (!maskeliMi) {
+          const { data: kendiTeklifi } = await supabase
+            .from("teklifler").select("id").eq("ihale_id", ihaleId).eq("kullanici_id", uid).maybeSingle();
+          maskeliMi = !!kendiTeklifi;
+        }
+        if (!maskeliMi) {
+          const { data } = await supabase.from("kullanicilar").select("plan_turu").eq("id", uid).maybeSingle();
+          maskeliMi = data?.plan_turu === "kurumsal";
+        }
+      }
+
+      if (maskeliMi) {
+        const [{ data: liste }, { data: kazananFiyatData }] = await Promise.all([
+          supabase.rpc("ihale_teklif_listesi_maskeli", { p_ihale_id: ihaleId }),
+          supabase.rpc("ihale_kazanan_fiyat", { p_ihale_id: ihaleId }),
+        ]);
+        const firmalar: TeklifFirma[] = (liste ?? []).map((r: {
+          isim_maskeli: string; tutar: number; ortalama_puan: number | null; yorum_sayisi: number;
+        }) => ({
+          tutar: r.tutar,
+          kullanici_adi: r.isim_maskeli,
+          ortalamaPuan: r.ortalama_puan,
+          yorumSayisi: r.yorum_sayisi,
+        }));
+        const kazananFiyat = kazananFiyatData?.[0]?.tutar ?? null;
+        if (!iptal) {
+          setSonuc({ durum: "maskeli", firmalar, kazananFiyat, kazananVarMi: kazananFiyat !== null });
+        }
+        return;
+      }
+
+      const { data: varMi } = await supabase.rpc("ihale_kazanan_var_mi", { p_ihale_id: ihaleId });
+      if (!iptal) setSonuc({ durum: "kilitli", firmalar: [], kazananFiyat: null, kazananVarMi: !!varMi });
     });
 
     return () => { iptal = true; };

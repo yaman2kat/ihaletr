@@ -112,6 +112,7 @@ export const mockIhaleler: Ihale[] = [
     baslangic_fiyati: 4200000,
     mevcut_teklif: 3850000,
     durum: "tamamlandi",
+    secilen_firma_id: "m3",
     kurum: "Nilüfer Tekstil Sanayi A.Ş.",
     sehir: "Bursa",
     yapi_insaat_ruhsati: "var",

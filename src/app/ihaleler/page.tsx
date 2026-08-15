@@ -109,6 +109,25 @@ function IhalelerIcerik() {
 
   const [dbIhaleler,     setDbIhaleler]     = useState<Ihale[]>([]);
   const [teklifSayilari, setTeklifSayilari] = useState<Record<string, number>>({});
+  const [benimBekleyenlerim, setBenimBekleyenlerim] = useState<Ihale[]>([]);
+
+  // Giris yapan kullanicinin kendi inceleme bekleyen ihaleleri -- RLS
+  // (olusturan_id = auth.uid()) sayesinde yalnizca kendisi bu satirlari
+  // cekebilir, baskasina hic gorunmez. Listede en ustte, ozel bir
+  // rozetle gosterilir (bkz. asagidaki render).
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session?.user) { setBenimBekleyenlerim([]); return; }
+      const { data } = await supabase
+        .from("ihaleler")
+        .select("*")
+        .eq("olusturan_id", session.user.id)
+        .eq("inceleme_durumu", "beklemede")
+        .order("created_at", { ascending: false });
+      setBenimBekleyenlerim((data ?? []) as Ihale[]);
+    });
+  }, []);
 
   // Genel listede yalnizca admin incelemesinden gecmis (onaylandi) gercek
   // ihaleler gorunur -- beklemede/reddedildi olanlar RLS tarafindan zaten
@@ -245,6 +264,24 @@ function IhalelerIcerik() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">İhaleler</h1>
         <p className="text-gray-500">{filtreliIhaleler.length} ihale listeleniyor</p>
       </div>
+
+      {benimBekleyenlerim.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400" />
+            İnceleme Bekleyen İhaleleriniz
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {benimBekleyenlerim.map((ihale) => (
+              <IhaleKarti
+                key={ihale.id}
+                ihale={ihale}
+                ozelRozet={{ etiket: "Beklemede - Sadece siz görebilirsiniz", cls: "bg-amber-100 text-amber-800" }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="relative mb-6">
         <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
