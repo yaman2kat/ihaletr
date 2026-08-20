@@ -77,6 +77,7 @@ export interface MuteahhitProfil {
   yetki_belgesi_grubu?: YetkiBelgesiGrubu;
   telefon?: string;
   email?: string;
+  web_sitesi?: string;
   aciklama?: string;
   foto_url?: string;
   sertifika_bilgisi?: string;

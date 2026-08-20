@@ -167,7 +167,11 @@ async function main() {
   check("teklif alan ama kazanan secmemis ihale sahibi profili GOREBILMELI (item 1)", bulusmusProfil?.kullanici_id === muteahhitA.id);
 
   const { data: bulusmusKazananMi } = await bulusmusClient.rpc("muteahhit_ile_kazanan_olarak_bulusmus_mu", { p_muteahhit_id: muteahhitA.id });
-  check("kazanan secilmemisse kazanan_mu FALSE olmali (item 3 - iletisim gizli kalmali)", bulusmusKazananMi === false);
+  // NOT: kazanan_mu artik UI'da iletisim bilgisini gizlemek icin
+  // KULLANILMIYOR (o kisit kaldirildi -- teklif veren her muteahhit
+  // ihale bittiginde tam profile erisir). Fonksiyon hala dogru cevap
+  // veriyor mu diye (baska bir olasi kullanim icin) burada dogrulaniyor.
+  check("kazanan secilmemisse kazanan_mu FALSE donmeli (fonksiyon dogrulugu)", bulusmusKazananMi === false);
 
   const ilgisizClient = await signedInClient(sahibiIlgisiz.email);
   const { data: ilgisizProfil } = await ilgisizClient.from("muteahhit_profiller").select("*").eq("kullanici_id", muteahhitA.id).maybeSingle();

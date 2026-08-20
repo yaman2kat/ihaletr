@@ -116,35 +116,29 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
   // "Profili Düzenle" butonu yalnızca profilin sahibine ve admin rolüne
   // gösterilir; demo/mock profillerde (m1/m2/m3) sahiplik kavramı
   // olmadığından herkese açık bırakılır (bkz. duzenle/page.tsx'teki aynı
-  // mock istisnası). İletişim bilgileri (telefon/email) de aynı mock
-  // istisnasıyla herkese açık kalır; gerçek profillerde ise yalnızca
-  // sahibine, admine ve bu müteahhidi BİTMİŞ bir ihalede KAZANAN olarak
-  // seçmiş arsa sahibine görünür.
+  // mock istisnası).
+  //
+  // İletişim bilgileri (telefon/email/web sitesi) ve referans projeler/
+  // yorumlar burada AYRICA kısıtlanmaz: bu sayfaya kadar gelinebilmiş
+  // olması zaten RLS'in (muteahhit_profil_gizlilik_migration.sql)
+  // sahibi/admin/"bu müteahhide bitmiş bir ihalede teklif vermiş arsa
+  // sahibi" kuralını geçtiği anlamına gelir -- teklif veren HER
+  // müteahhidin profiline tam erişim, ihale bittiğinde kalıcı olarak
+  // açılır (kazanan seçilmiş olması şart değildir).
   const mockIstisnasi = ["m1", "m2", "m3"].includes(profil.kullanici_id);
   let duzenlemeYetkisiVar = mockIstisnasi;
-  let iletisimGorunur = mockIstisnasi;
   if (!mockIstisnasi) {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       if (session.user.id === profil.kullanici_id) {
         duzenlemeYetkisiVar = true;
-        iletisimGorunur = true;
       } else {
         const { data: oturumKullanici } = await supabase
           .from("kullanicilar")
           .select("rol")
           .eq("id", session.user.id)
           .maybeSingle();
-        if (oturumKullanici?.rol === "admin") {
-          duzenlemeYetkisiVar = true;
-          iletisimGorunur = true;
-        } else {
-          const { data: kazananMi } = await supabase.rpc(
-            "muteahhit_ile_kazanan_olarak_bulusmus_mu",
-            { p_muteahhit_id: profil.kullanici_id }
-          );
-          iletisimGorunur = !!kazananMi;
-        }
+        duzenlemeYetkisiVar = oturumKullanici?.rol === "admin";
       }
     }
   }
@@ -249,7 +243,7 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
                 </div>
               )}
               {/* Telefon */}
-              {iletisimGorunur && profil.telefon && (
+              {profil.telefon && (
                 <a href={`tel:${profil.telefon.replace(/\s/g, "")}`}
                   className="flex items-center gap-2 text-gray-700 hover:text-blue-700 transition-colors">
                   <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -260,7 +254,7 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
                 </a>
               )}
               {/* E-posta */}
-              {iletisimGorunur && profil.email && (
+              {profil.email && (
                 <a href={`mailto:${profil.email}`}
                   className="flex items-center gap-2 text-gray-700 hover:text-blue-700 transition-colors">
                   <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,17 +264,17 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
                   <span className="font-medium truncate">{profil.email}</span>
                 </a>
               )}
-              {/* Iletisim gizli: kullaniciya neden gormedigini acikla */}
-              {!iletisimGorunur && (profil.telefon || profil.email) && (
-                <div className="flex items-start gap-2 text-gray-400">
-                  <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {/* Web Sitesi */}
+              {profil.web_sitesi && (
+                <a href={profil.web_sitesi.startsWith("http") ? profil.web_sitesi : `https://${profil.web_sitesi}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-gray-700 hover:text-blue-700 transition-colors">
+                  <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 000 18M12.5 3a17 17 0 010 18" />
                   </svg>
-                  <p className="text-xs leading-relaxed">
-                    İletişim bilgileri yalnızca bu firmayla bir ihale üzerinden buluşmuş (kazanan olarak seçilmiş) arsa sahiplerine görünür.
-                  </p>
-                </div>
+                  <span className="font-medium truncate">{profil.web_sitesi}</span>
+                </a>
               )}
             </div>
 
