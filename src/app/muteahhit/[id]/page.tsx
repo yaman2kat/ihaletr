@@ -16,8 +16,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const supabase = await createClient();
   const { data: dbProfil } = await supabase.from("muteahhit_profiller").select("firma_adi").eq("kullanici_id", id).maybeSingle();
   const profil = dbProfil ?? mockMuteahhitler.find((m) => m.id === id);
-  if (!profil) return { title: "Müteahhit Bulunamadı - İhaleTR" };
-  return { title: `${profil.firma_adi} - Müteahhit Profili | İhaleTR` };
+  if (profil) return { title: `${profil.firma_adi} - Müteahhit Profili | İhaleTR` };
+
+  // dbProfil null RLS'ten (erisim yok) ya da satirin hic olmamasindan
+  // kaynaklaniyor olabilir -- ikisini ayirt etmek icin RLS'i bilincli
+  // atlayan bir varlik kontrolu yapiliyor.
+  const { data: varMi } = await supabase.rpc("muteahhit_profil_var_mi", { p_muteahhit_id: id });
+  if (varMi) return { title: "Müteahhit Profili - İhaleTR" };
+  return { title: "Müteahhit Bulunamadı - İhaleTR" };
 }
 
 const TUR_RENK: Record<InsaatTuru, string> = {
@@ -62,7 +68,32 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
 
   const profil: MuteahhitProfilTipi | (typeof mockMuteahhitler)[number] | undefined =
     dbProfil ? (dbProfil as MuteahhitProfilTipi) : mockMuteahhitler.find((m) => m.id === id);
-  if (!profil) notFound();
+
+  if (!profil) {
+    // dbProfil null RLS'ten (erisim yok) ya da satirin hic olmamasindan
+    // kaynaklaniyor olabilir -- ikisini ayirt etmek icin RLS'i bilincli
+    // atlayan bir varlik kontrolu yapiliyor.
+    const { data: varMi } = await supabase.rpc("muteahhit_profil_var_mi", { p_muteahhit_id: id });
+    if (!varMi) notFound();
+
+    return (
+      <div className="max-w-lg mx-auto px-4 py-24 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-5">
+          <svg className="w-7 h-7 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </div>
+        <h1 className="text-lg font-bold text-gray-900 mb-2">Bu profil size özel değil</h1>
+        <p className="text-gray-500 text-sm leading-relaxed">
+          Bu profili görüntülemek için bir ihale açmanız ve bu firma ile buluşmanız gerekmektedir.
+        </p>
+        <Link href="/ihaleler" className="inline-block mt-6 text-blue-700 font-semibold text-sm hover:underline">
+          İhalelere Göz At
+        </Link>
+      </div>
+    );
+  }
 
   let projeler: ReferansProje[] = mockReferansProjeler.filter((p) => p.muteahhit_id === id);
   let yorumlar: MuteahhitYorum[] = mockMuteahhitYorumlar.filter((y) => y.muteahhit_id === id);
@@ -85,20 +116,35 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
   // "Profili Düzenle" butonu yalnızca profilin sahibine ve admin rolüne
   // gösterilir; demo/mock profillerde (m1/m2/m3) sahiplik kavramı
   // olmadığından herkese açık bırakılır (bkz. duzenle/page.tsx'teki aynı
-  // mock istisnası).
-  let duzenlemeYetkisiVar = ["m1", "m2", "m3"].includes(profil.kullanici_id);
-  if (!duzenlemeYetkisiVar) {
+  // mock istisnası). İletişim bilgileri (telefon/email) de aynı mock
+  // istisnasıyla herkese açık kalır; gerçek profillerde ise yalnızca
+  // sahibine, admine ve bu müteahhidi BİTMİŞ bir ihalede KAZANAN olarak
+  // seçmiş arsa sahibine görünür.
+  const mockIstisnasi = ["m1", "m2", "m3"].includes(profil.kullanici_id);
+  let duzenlemeYetkisiVar = mockIstisnasi;
+  let iletisimGorunur = mockIstisnasi;
+  if (!mockIstisnasi) {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       if (session.user.id === profil.kullanici_id) {
         duzenlemeYetkisiVar = true;
+        iletisimGorunur = true;
       } else {
         const { data: oturumKullanici } = await supabase
           .from("kullanicilar")
           .select("rol")
           .eq("id", session.user.id)
           .maybeSingle();
-        duzenlemeYetkisiVar = oturumKullanici?.rol === "admin";
+        if (oturumKullanici?.rol === "admin") {
+          duzenlemeYetkisiVar = true;
+          iletisimGorunur = true;
+        } else {
+          const { data: kazananMi } = await supabase.rpc(
+            "muteahhit_ile_kazanan_olarak_bulusmus_mu",
+            { p_muteahhit_id: profil.kullanici_id }
+          );
+          iletisimGorunur = !!kazananMi;
+        }
       }
     }
   }
@@ -203,7 +249,7 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
                 </div>
               )}
               {/* Telefon */}
-              {profil.telefon && (
+              {iletisimGorunur && profil.telefon && (
                 <a href={`tel:${profil.telefon.replace(/\s/g, "")}`}
                   className="flex items-center gap-2 text-gray-700 hover:text-blue-700 transition-colors">
                   <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -214,7 +260,7 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
                 </a>
               )}
               {/* E-posta */}
-              {profil.email && (
+              {iletisimGorunur && profil.email && (
                 <a href={`mailto:${profil.email}`}
                   className="flex items-center gap-2 text-gray-700 hover:text-blue-700 transition-colors">
                   <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -223,6 +269,18 @@ export default async function MuteahhitProfil({ params }: { params: Promise<{ id
                   </svg>
                   <span className="font-medium truncate">{profil.email}</span>
                 </a>
+              )}
+              {/* Iletisim gizli: kullaniciya neden gormedigini acikla */}
+              {!iletisimGorunur && (profil.telefon || profil.email) && (
+                <div className="flex items-start gap-2 text-gray-400">
+                  <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <p className="text-xs leading-relaxed">
+                    İletişim bilgileri yalnızca bu firmayla bir ihale üzerinden buluşmuş (kazanan olarak seçilmiş) arsa sahiplerine görünür.
+                  </p>
+                </div>
               )}
             </div>
 
