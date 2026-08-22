@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Ihale } from "@/lib/types";
 import { mockIhaleTeklifleri } from "@/lib/mock-data";
-import EnDusukTeklif from "@/components/EnDusukTeklif";
+import IhaleSonucRaporu from "@/components/IhaleSonucRaporu";
 
 // Durum rozeti mantığı:
 // - Beklemede/İptal: sabit rozet.
@@ -106,15 +106,6 @@ export default function IhaleKarti({ ihale, ozelRozet }: Props) {
           <p className="text-gray-400 text-xs mb-0.5">Başlangıç Fiyatı</p>
           <p className="font-semibold text-gray-900">{formatPara(ihale.baslangic_fiyati)}</p>
         </div>
-        {bittiMi && (
-          <EnDusukTeklif
-            ihaleId={ihale.id}
-            mevcutTeklif={ihale.mevcut_teklif}
-            olusturanId={ihale.olusturan_id}
-            teklifler={teklifler}
-            bittiMi={bittiMi}
-          />
-        )}
         <div>
           <p className="text-gray-400 text-xs mb-0.5">Bitiş Tarihi</p>
           <p className="text-gray-700">{formatTarih(ihale.bitis_tarihi)}</p>
@@ -126,6 +117,20 @@ export default function IhaleKarti({ ihale, ozelRozet }: Props) {
           </p>
         </div>
       </div>
+
+      {bittiMi && (
+        <IhaleSonucRaporu
+          ihale={{
+            id: ihale.id,
+            baslik: ihale.baslik,
+            kurum: ihale.kurum,
+            baslangic_tarihi: ihale.baslangic_tarihi,
+            bitis_tarihi: ihale.bitis_tarihi,
+          }}
+          teklifler={teklifler}
+          olusturanId={ihale.olusturan_id}
+        />
+      )}
 
       <Link
         href={`/ihaleler/${ihale.id}`}

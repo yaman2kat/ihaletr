@@ -9,8 +9,7 @@ import SonTeklifler from "./SonTeklifler";
 import TeklifKutusu from "./TeklifKutusu";
 import IhaleBelgeleri from "./IhaleBelgeleri";
 import AdaParselButon from "@/components/AdaParselButon";
-import EnDusukTeklif from "@/components/EnDusukTeklif";
-import IhaleSonucRaporu from "./IhaleSonucRaporu";
+import IhaleSonucRaporu from "@/components/IhaleSonucRaporu";
 
 function formatPara(tutar: number): string {
   return new Intl.NumberFormat("tr-TR", {
@@ -91,7 +90,7 @@ export default async function IhaleDetay({
 
   // Mock/demo ihaleler icin sabit ornek teklif listesi (gercek ihalelerde
   // teklif veren kimligi/tutari kimseye gosterilmez -- bkz. SonTeklifler,
-  // EnDusukTeklif, IhaleSonucRaporu). Gercek ihalelerde teklif SAYISI ise
+  // IhaleSonucRaporu). Gercek ihalelerde teklif SAYISI ise
   // RLS'i bilincli atlayan, kimlik/tutar icermeyen herkese acik bir RPC
   // ile alinir.
   const teklifler: MockTeklif[] = mockIhaleTeklifleri[id] ?? [];
@@ -299,14 +298,6 @@ export default async function IhaleDetay({
                 Fiyat Bilgisi
               </p>
               <div className="flex flex-col gap-3 mb-5">
-                <EnDusukTeklif
-                  ihaleId={ihale.id}
-                  mevcutTeklif={ihale.mevcut_teklif}
-                  olusturanId={ihale.olusturan_id}
-                  teklifler={teklifler}
-                  bittiMi={sonucGosterilsinMi}
-                  boyut="buyuk"
-                />
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-xs text-gray-400 mb-1">Başlangıç Fiyatı</p>
                   <p className="text-xl font-semibold text-gray-700">{formatPara(ihale.baslangic_fiyati)}</p>
