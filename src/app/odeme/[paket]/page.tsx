@@ -15,12 +15,14 @@ const PAKET_BILGI: Record<string, {
   aciklama: string;
   renk: "blue" | "purple" | "gray" | "teal";
   geriHref: string;
+  // Yalnızca müteahhit teklif paketlerinde: "kuruluşa özel" indirim
+  // rozeti için normal fiyat + indirimli (charged) fiyatın gösterimi.
+  kuruluşaOzel?: { normal: string };
 }> = {
-  premium:   { isim: "Premium Üyelik",          fiyat: "500.00",  fiyatGoster: "500₺/ay",      aciklama: "Sınırsız ihale, 45 güne kadar süre uzatma",    renk: "blue",   geriHref: "/premium"       },
-  kurumsal:  { isim: "Kurumsal Üyelik",          fiyat: "2499.00", fiyatGoster: "2.499₺/ay",    aciklama: "Premium'ın tüm özellikleri + çoklu kullanıcı", renk: "purple", geriHref: "/premium"       },
-  baslangic: { isim: "Başlangıç Teklif Paketi",  fiyat: "299.00",  fiyatGoster: "299₺",         aciklama: "5 teklif hakkı, süresiz geçerli",              renk: "gray",   geriHref: "/teklif-paketi" },
-  standart:  { isim: "Standart Teklif Paketi",   fiyat: "699.00",  fiyatGoster: "699₺",         aciklama: "15 teklif hakkı, süresiz geçerli",             renk: "blue",   geriHref: "/teklif-paketi" },
-  pro:       { isim: "Pro Teklif Paketi",         fiyat: "1499.00", fiyatGoster: "1.499₺/ay",   aciklama: "Sınırsız teklif hakkı, aylık yenileme",        renk: "teal",   geriHref: "/teklif-paketi" },
+  premium:      { isim: "Premium Üyelik",   fiyat: "499.00",  fiyatGoster: "499₺/ay",   aciklama: "Sınırsız ihale, 45 güne kadar ihale süresi + ekstra 15 güne kadar uzatma", renk: "blue",   geriHref: "/premium"       },
+  kurumsal:     { isim: "Kurumsal Üyelik",  fiyat: "2499.00", fiyatGoster: "2.499₺/ay", aciklama: "Premium'ın tüm özellikleri + çoklu kullanıcı",                             renk: "purple", geriHref: "/premium"       },
+  "teklif-temel":    { isim: "Temel Paket",     fiyat: "699.00",  fiyatGoster: "699₺",      aciklama: "1 teklif hakkı, tek seferlik",       renk: "gray", geriHref: "/teklif-paketi", kuruluşaOzel: { normal: "999₺" } },
+  "teklif-kurumsal": { isim: "Kurumsal Paket",  fiyat: "2299.00", fiyatGoster: "2.299₺/ay", aciklama: "Sınırsız teklif hakkı, aylık yenileme", renk: "teal", geriHref: "/teklif-paketi", kuruluşaOzel: { normal: "3.299₺" } },
 };
 
 const RENK_CLS = {
@@ -65,13 +67,18 @@ export default function OdemeSayfasi({ params }: { params: Promise<{ paket: stri
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata,       setHata]       = useState("");
   const [testAcik,   setTestAcik]   = useState(false);
+  const [performansIndirimi, setPerformansIndirimi] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
       setKullanici(session?.user ?? null);
+      if (session?.user && (paket === "teklif-temel" || paket === "teklif-kurumsal")) {
+        supabase.rpc("performans_indirimi_uygulanir_mi", { p_kullanici_id: session.user.id })
+          .then(({ data }) => setPerformansIndirimi(Boolean(data)));
+      }
     });
-  }, []);
+  }, [paket]);
 
   // Geçersiz paket
   if (!bilgi) {
@@ -167,6 +174,11 @@ export default function OdemeSayfasi({ params }: { params: Promise<{ paket: stri
   }
 
   const renkCls = RENK_CLS[bilgi.renk];
+  const performansIndirimiGecerliMi = performansIndirimi && (paket === "teklif-temel" || paket === "teklif-kurumsal");
+  const tabanTutar = parseFloat(bilgi.fiyat);
+  const gosterilecekTutar = performansIndirimiGecerliMi ? tabanTutar / 2 : tabanTutar;
+  const anaTutarMetni = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(gosterilecekTutar) + "₺";
+  const fiyatSuffix = bilgi.fiyatGoster.includes("/") ? bilgi.fiyatGoster.split("/")[1].trim() : null;
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-start justify-center px-4 pt-16 pb-24">
@@ -186,12 +198,28 @@ export default function OdemeSayfasi({ params }: { params: Promise<{ paket: stri
           <p className="text-sm font-medium opacity-80 mb-1">Seçilen Paket</p>
           <h1 className="text-2xl font-bold mb-1">{bilgi.isim}</h1>
           <p className="text-sm opacity-80 mb-4">{bilgi.aciklama}</p>
+
+          {bilgi.kuruluşaOzel && (
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-sm line-through opacity-60">{bilgi.kuruluşaOzel.normal}</span>
+              <span className="text-[10px] font-bold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full whitespace-nowrap">
+                🎉 Kuruluşa Özel — Kısa Süreliğine!
+              </span>
+            </div>
+          )}
+
           <div className="flex items-baseline gap-1">
-            <span className="text-4xl font-bold">{bilgi.fiyatGoster.split("/")[0]}</span>
-            {bilgi.fiyatGoster.includes("/") && (
-              <span className="text-sm opacity-70">/ {bilgi.fiyatGoster.split("/")[1]}</span>
+            <span className="text-4xl font-bold">{anaTutarMetni}</span>
+            {fiyatSuffix && (
+              <span className="text-sm opacity-70">/ {fiyatSuffix}</span>
             )}
           </div>
+
+          {performansIndirimiGecerliMi && (
+            <div className="inline-block mt-2 text-[10px] font-bold bg-green-400 text-green-950 px-2 py-0.5 rounded-full">
+              Performans İndirimi: %50
+            </div>
+          )}
         </div>
 
         {/* Sandbox test kartları */}
@@ -328,7 +356,7 @@ export default function OdemeSayfasi({ params }: { params: Promise<{ paket: stri
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                Güvenli Ödeme Yap — {bilgi.fiyatGoster}
+                Güvenli Ödeme Yap — {anaTutarMetni}{fiyatSuffix ? `/${fiyatSuffix}` : ""}
               </>
             )}
           </button>

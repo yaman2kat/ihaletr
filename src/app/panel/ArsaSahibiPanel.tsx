@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Ihale, PlanTuru } from "@/lib/types";
-import { PLAN_MAKS_IHALE_GUNU } from "@/lib/plan-limitleri";
+import { PLAN_ILK_IHALE_GUNU } from "@/lib/plan-limitleri";
 import { kalanGun, kalanSure, tarihFormat, paraBirim, DURUM_BADGE } from "./utils";
 
 const PLAN_BADGE: Record<PlanTuru, { etiket: string; cls: string }> = {
@@ -159,7 +159,7 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
             {PLAN_BADGE[planTuru].etiket}
           </span>
           <p className="text-sm text-gray-500">
-            İhalelerinizde en fazla <span className="font-semibold text-gray-900">{PLAN_MAKS_IHALE_GUNU[planTuru]} gün</span> süre tanımlayabilirsiniz
+            İhalelerinizde en fazla <span className="font-semibold text-gray-900">{PLAN_ILK_IHALE_GUNU[planTuru]} gün</span> süre tanımlayabilirsiniz
           </p>
         </div>
         {planTuru !== "kurumsal" && (

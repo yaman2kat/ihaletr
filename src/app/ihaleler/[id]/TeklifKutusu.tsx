@@ -19,7 +19,7 @@ function formatPara(tutar: number) {
   }).format(tutar);
 }
 
-// Pro pakette kalan_teklif_hakki bu değere eşit veya büyük olursa sınırsız sayılır
+// Kurumsal Paket'te kalan_teklif_hakki bu değere eşit veya büyük olursa sınırsız sayılır
 const SINIRSIN_ESIK = 99999;
 
 function hakEtiket(hak: number): string {

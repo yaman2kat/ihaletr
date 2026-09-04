@@ -682,6 +682,12 @@ ALTER TABLE public.kullanicilar
   ADD COLUMN IF NOT EXISTS kalan_teklif_hakki    integer NOT NULL DEFAULT 2,
   ADD COLUMN IF NOT EXISTS toplam_teklif_sayisi  integer NOT NULL DEFAULT 0;
 
+-- Ücretsiz plandaki 1 ihale hakkı tek kullanımlıktır: kullanıcı ilk
+-- ihalesini yayınladığında bu alan true olur, ikinci deneme
+-- (ihale-olustur sayfasında) buna bakılarak engellenir.
+ALTER TABLE public.kullanicilar
+  ADD COLUMN IF NOT EXISTS ucretsiz_ihale_hakki_kullanildi boolean NOT NULL DEFAULT false;
+
 -- E-posta bildirim tercihleri (in-app bildirim_tercihleri'nden ayri;
 -- hangi olaylarda e-posta almak istedigini tutar). Su asamada yalnizca
 -- SAKLANIR -- gercek e-posta gonderimi (Resend/SendGrid) ayri bir
@@ -857,6 +863,47 @@ CREATE POLICY "Giris yapan muteahhite yorum ekleyebilir"
 
 CREATE POLICY "Kullanici kendi muteahhit yorumunu silebilir"
   ON public.muteahhit_yorumlar FOR DELETE USING (auth.uid() = kullanici_id);
+
+-- Müteahhit performans indirimi: sınırsız teklif paketi sahibi
+-- (kalan_teklif_hakki >= 99999), en az 10 yorumu ve 4.5+ ortalama
+-- puanı olan müteahhitlere teklif paketi ücretlerinde %50 indirim
+-- uygulanır. kalan_teklif_hakki hassas bir alan olduğundan bu
+-- fonksiyon ham değeri değil yalnızca bir boolean döndürür ve
+-- yalnızca kendi hesabı (auth.uid() = p_kullanici_id) ya da servis
+-- rolü için hesaplama yapar.
+CREATE OR REPLACE FUNCTION public.performans_indirimi_uygulanir_mi(p_kullanici_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_sinirsiz_paket boolean;
+  v_ortalama_puan  numeric;
+  v_yorum_sayisi    integer;
+BEGIN
+  IF auth.uid() IS DISTINCT FROM p_kullanici_id AND auth.role() <> 'service_role' THEN
+    RETURN false;
+  END IF;
+
+  SELECT COALESCE(kalan_teklif_hakki, 0) >= 99999
+    INTO v_sinirsiz_paket
+    FROM public.kullanicilar
+    WHERE id = p_kullanici_id;
+
+  SELECT AVG(puan), COUNT(*)
+    INTO v_ortalama_puan, v_yorum_sayisi
+    FROM public.muteahhit_yorumlar
+    WHERE muteahhit_id = p_kullanici_id;
+
+  RETURN COALESCE(v_sinirsiz_paket, false)
+     AND COALESCE(v_yorum_sayisi, 0) >= 10
+     AND COALESCE(v_ortalama_puan, 0) >= 4.5;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.performans_indirimi_uygulanir_mi(uuid) TO authenticated, service_role;
 
 CREATE TRIGGER trg_ihaleler_updated_at
   BEFORE UPDATE ON public.ihaleler

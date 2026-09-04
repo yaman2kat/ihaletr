@@ -36,11 +36,11 @@ const KATEGORILER: Kategori[] = [
     sorular: [
       {
         s: "Üyelik planları arasındaki farklar nelerdir?",
-        c: "Ücretsiz plan 1 aktif ihale ve en fazla 5 gün ihale süresiyle sınırlıdır, süre uzatma içermez. Premium plan sınırsız aktif ihale, 45 güne kadar ihale süresi/uzatma ve teklifçi analitikleri sunar. Kurumsal plan 90 güne kadar süre/uzatma, 10 kullanıcılı hesap, özel API erişimi ve SLA garantisi ile en kapsamlı pakettir. Detaylar için Premium sayfasındaki karşılaştırma tablosuna bakabilirsiniz.",
+        c: "Ücretsiz plan, tek kullanımlık 1 ihale hakkı ve en fazla 5 gün ihale süresiyle sınırlıdır, süre uzatma içermez. Premium plan sınırsız aktif ihale, 45 güne kadar ihale süresi, ekstra 15 güne kadar uzatma (toplamda 60 güne kadar) ve teklifçi analitikleri sunar. Kurumsal plan 60 güne kadar ihale süresi, ekstra 30 güne kadar uzatma (toplamda 90 güne kadar), 10 kullanıcılı hesap, özel API erişimi ve SLA garantisi ile en kapsamlı pakettir. Detaylar için Premium sayfasındaki karşılaştırma tablosuna bakabilirsiniz.",
       },
       {
         s: "Teklif verme ücretlendirmesi nasıl işliyor?",
-        c: "Teklif vermek \"teklif hakkı\" tüketir. Her hesaba tanınan ücretsiz haklar bittiğinde, Teklif Paketi sayfasından Başlangıç (5 hak), Standart (15 hak) veya sınırsız aylık Pro paketlerinden birini satın alarak teklif vermeye devam edebilirsiniz.",
+        c: "Teklif vermek \"teklif hakkı\" tüketir. Her hesaba tanınan ücretsiz haklar bittiğinde, Teklif Paketi sayfasından Temel Paket (1 hak, tek seferlik) veya sınırsız aylık Kurumsal Paket'ten birini satın alarak teklif vermeye devam edebilirsiniz.",
       },
       {
         s: "İlk 2 teklifim neden ücretsiz?",
@@ -52,7 +52,7 @@ const KATEGORILER: Kategori[] = [
       },
       {
         s: "İade politikanız nedir?",
-        c: "Premium ve Kurumsal abonelik planları 14 gün iade güvencesiyle sunulur. Tek seferlik teklif paketleri (Başlangıç/Standart) kullanılmaya başlanmadıysa iptal talepleri destek ekibimiz tarafından değerlendirilir; talepleriniz için İletişim sayfasından bize ulaşabilirsiniz.",
+        c: "Premium ve Kurumsal abonelik planları 14 gün iade güvencesiyle sunulur. Tek seferlik Temel Paket kullanılmaya başlanmadıysa iptal talepleri destek ekibimiz tarafından değerlendirilir; talepleriniz için İletişim sayfasından bize ulaşabilirsiniz.",
       },
     ],
   },
@@ -61,11 +61,11 @@ const KATEGORILER: Kategori[] = [
     sorular: [
       {
         s: "İhale süresiyle ilgili kurallar nelerdir?",
-        c: "İhale oluştururken seçebileceğiniz son teklif tarihi planınıza göre sınırlıdır: Ücretsiz planda en fazla 5 gün, Premium planda en fazla 45 gün, Kurumsal planda en fazla 90 gün. İdeal ihale süresi olarak başlangıç tarihinden itibaren 20-30 gün önerilir.",
+        c: "İhale oluştururken seçebileceğiniz son teklif tarihi planınıza göre sınırlıdır: Ücretsiz planda en fazla 5 gün, Premium planda en fazla 45 gün, Kurumsal planda en fazla 60 gün. İdeal ihale süresi olarak başlangıç tarihinden itibaren 20-30 gün önerilir.",
       },
       {
         s: "İhale süresini nasıl uzatabilirim?",
-        c: "Süresi dolmuş bir ihalenin detay sayfasındaki \"İhale Sonucunu Göster\" raporu içinden \"İhaleyi Uzat\" bölümünü kullanabilirsiniz. Ücretsiz planda uzatma yapılamaz; Premium ve Kurumsal planlarda toplam ihale süresi (zaten geçen süre dahil) planınızın üst sınırını (45 / 90 gün) aşamaz.",
+        c: "Süresi dolmuş bir ihalenin detay sayfasındaki \"İhale Sonucunu Göster\" raporu içinden \"İhaleyi Uzat\" bölümünü kullanabilirsiniz. Ücretsiz planda uzatma yapılamaz; Premium planda ekstra 15 güne kadar (toplamda en fazla 60 gün), Kurumsal planda ekstra 30 güne kadar (toplamda en fazla 90 gün) uzatabilirsiniz.",
       },
       {
         s: "En düşük/en yüksek teklifi kimler görebilir?",

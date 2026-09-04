@@ -1,62 +1,45 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
 interface Paket {
   isim: string;
   hak: string;
-  hakSayi: number | null;
-  fiyat: string;
+  normalFiyat: string;
+  indirimliFiyat: string;
   fiyatAlt: string;
   aciklama: string;
   ozellikler: string[];
   popüler: boolean;
-  ctaMetni: string;
   ctaHref: string;
-  vurgu: "gray" | "blue" | "purple";
+  vurgu: "gray" | "teal";
 }
 
 const PAKETLER: Paket[] = [
   {
-    isim: "Başlangıç",
-    hak: "5 teklif hakkı",
-    hakSayi: 5,
-    fiyat: "299₺",
+    isim: "Temel Paket",
+    hak: "1 teklif hakkı",
+    normalFiyat: "999₺",
+    indirimliFiyat: "699₺",
     fiyatAlt: "tek seferlik",
-    aciklama: "Birkaç ihaleye teklif vermek isteyen bireysel kullanıcılar için.",
+    aciklama: "Bir ihaleye teklif vermek isteyen bireysel kullanıcılar için.",
     ozellikler: [
-      "5 teklif hakkı (tek seferlik)",
-      "Haklar süresiz geçerlidir",
+      "1 teklif hakkı (tek seferlik)",
+      "Hak süresiz geçerlidir",
       "Tüm ihaleler için geçerli",
       "Teklif takip paneli",
     ],
     popüler: false,
-    ctaMetni: "Paketi Satın Al",
-    ctaHref: "/odeme/baslangic",
+    ctaHref: "/odeme/teklif-temel",
     vurgu: "gray",
   },
   {
-    isim: "Standart",
-    hak: "15 teklif hakkı",
-    hakSayi: 15,
-    fiyat: "699₺",
-    fiyatAlt: "tek seferlik",
-    aciklama: "Düzenli teklif verenler ve KOBİ'ler için en verimli paket.",
-    ozellikler: [
-      "15 teklif hakkı (tek seferlik)",
-      "Haklar süresiz geçerlidir",
-      "Tüm ihaleler için geçerli",
-      "Teklif takip paneli",
-      "Öncelikli bildirimler",
-    ],
-    popüler: true,
-    ctaMetni: "Paketi Satın Al",
-    ctaHref: "/odeme/standart",
-    vurgu: "blue",
-  },
-  {
-    isim: "Pro",
+    isim: "Kurumsal Paket",
     hak: "Sınırsız teklif",
-    hakSayi: null,
-    fiyat: "1.499₺",
+    normalFiyat: "3.299₺",
+    indirimliFiyat: "2.299₺",
     fiyatAlt: "/ ay",
     aciklama: "Aktif müteahhitler ve kurumsal firmalar için limitsiz teklif imkânı.",
     ozellikler: [
@@ -67,32 +50,39 @@ const PAKETLER: Paket[] = [
       "Öncelikli bildirimler",
       "Öncelikli müşteri desteği",
     ],
-    popüler: false,
-    ctaMetni: "Pro'ya Geç",
-    ctaHref: "/odeme/pro",
-    vurgu: "purple",
+    popüler: true,
+    ctaHref: "/odeme/teklif-kurumsal",
+    vurgu: "teal",
   },
 ];
 
 const KART_CLS: Record<string, string> = {
-  gray:   "border-gray-200 bg-white",
-  blue:   "border-blue-500 bg-white ring-2 ring-blue-500 ring-offset-2",
-  purple: "border-purple-200 bg-white",
+  gray: "border-gray-200 bg-white",
+  teal: "border-teal-500 bg-white ring-2 ring-teal-500 ring-offset-2",
 };
 
 const CTA_CLS: Record<string, string> = {
-  gray:   "bg-gray-900 text-white hover:bg-gray-700",
-  blue:   "bg-blue-700 text-white hover:bg-blue-800 shadow-md shadow-blue-200",
-  purple: "bg-purple-700 text-white hover:bg-purple-800 shadow-md shadow-purple-200",
+  gray: "bg-gray-900 text-white hover:bg-gray-700",
+  teal: "bg-teal-700 text-white hover:bg-teal-800 shadow-md shadow-teal-200",
 };
 
 const HAK_CLS: Record<string, string> = {
-  gray:   "bg-gray-50 text-gray-700 border-gray-200",
-  blue:   "bg-blue-50 text-blue-700 border-blue-100",
-  purple: "bg-purple-50 text-purple-700 border-purple-100",
+  gray: "bg-gray-50 text-gray-700 border-gray-200",
+  teal: "bg-teal-50 text-teal-700 border-teal-100",
 };
 
 export default function TeklifPaketiSayfasi() {
+  const [performansIndirimi, setPerformansIndirimi] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user) return;
+      supabase.rpc("performans_indirimi_uygulanir_mi", { p_kullanici_id: session.user.id })
+        .then(({ data }) => setPerformansIndirimi(Boolean(data)));
+    });
+  }, []);
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
 
@@ -115,56 +105,87 @@ export default function TeklifPaketiSayfasi() {
           </svg>
           Teklif hakkınız doldu. Teklif vermek için bir paket seçin.
         </div>
+
+        {performansIndirimi && (
+          <div className="inline-flex items-center gap-2 mt-4 ml-3 bg-green-50 border border-green-200 text-green-800 text-sm font-bold px-5 py-2.5 rounded-full">
+            <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+            Performans İndirimi: %50 — yüksek puanınız ve sınırsız paketiniz sayesinde kazandınız!
+          </div>
+        )}
       </div>
 
       {/* Paket Kartları */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-        {PAKETLER.map((paket) => (
-          <div key={paket.isim}
-            className={`relative rounded-2xl border p-8 flex flex-col ${KART_CLS[paket.vurgu]}`}>
-            {paket.popüler && (
-              <div className="absolute -top-3.5 left-0 right-0 flex justify-center">
-                <span className="bg-blue-700 text-white text-xs font-bold px-4 py-1 rounded-full shadow">
-                  En Popüler
-                </span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16 max-w-3xl mx-auto">
+        {PAKETLER.map((paket) => {
+          const performansFiyat = (parseFloat(paket.indirimliFiyat.replace(/[.₺]/g, "").replace(",", ".")) / 2);
+          const gosterilenFiyat = performansIndirimi
+            ? `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(performansFiyat)}₺`
+            : paket.indirimliFiyat;
+
+          return (
+            <div key={paket.isim}
+              className={`relative rounded-2xl border p-8 flex flex-col ${KART_CLS[paket.vurgu]}`}>
+              {paket.popüler && (
+                <div className="absolute -top-3.5 left-0 right-0 flex justify-center">
+                  <span className="bg-teal-700 text-white text-xs font-bold px-4 py-1 rounded-full shadow">
+                    En Popüler
+                  </span>
+                </div>
+              )}
+
+              {/* Hak sayısı rozeti */}
+              <div className={`inline-flex items-center gap-1.5 self-start text-xs font-bold px-3 py-1.5 rounded-full border mb-5 ${HAK_CLS[paket.vurgu]}`}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {paket.hak}
               </div>
-            )}
 
-            {/* Hak sayısı rozeti */}
-            <div className={`inline-flex items-center gap-1.5 self-start text-xs font-bold px-3 py-1.5 rounded-full border mb-5 ${HAK_CLS[paket.vurgu]}`}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {paket.hak}
-            </div>
+              <div className="mb-6">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{paket.isim}</p>
 
-            <div className="mb-6">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{paket.isim}</p>
-              <div className="flex items-baseline gap-1 mb-2">
-                <span className="text-4xl font-bold text-gray-900">{paket.fiyat}</span>
-                <span className="text-gray-400 text-sm">{paket.fiyatAlt}</span>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-sm text-gray-400 line-through">{paket.normalFiyat}</span>
+                  <span className="text-[10px] font-bold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full whitespace-nowrap">
+                    🎉 Kuruluşa Özel — Kısa Süreliğine!
+                  </span>
+                </div>
+
+                <div className="flex items-baseline gap-1 mb-2">
+                  <span className="text-4xl font-bold text-gray-900">{gosterilenFiyat}</span>
+                  <span className="text-gray-400 text-sm">{paket.fiyatAlt}</span>
+                </div>
+
+                {performansIndirimi && (
+                  <span className="inline-block text-[10px] font-bold bg-green-400 text-green-950 px-2 py-0.5 rounded-full mb-2">
+                    Performans İndirimi: %50
+                  </span>
+                )}
+
+                <p className="text-sm text-gray-500 leading-relaxed">{paket.aciklama}</p>
               </div>
-              <p className="text-sm text-gray-500 leading-relaxed">{paket.aciklama}</p>
+
+              <Link href={paket.ctaHref}
+                className={`w-full text-center text-sm font-semibold py-3 rounded-xl transition-colors mb-7 block ${CTA_CLS[paket.vurgu]}`}>
+                Paketi Satın Al
+              </Link>
+
+              <ul className="flex flex-col gap-3 flex-1">
+                {paket.ozellikler.map((o) => (
+                  <li key={o} className="flex items-start gap-2.5">
+                    <svg className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-sm text-gray-700 leading-snug">{o}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-
-            <Link href={paket.ctaHref}
-              className={`w-full text-center text-sm font-semibold py-3 rounded-xl transition-colors mb-7 block ${CTA_CLS[paket.vurgu]}`}>
-              {paket.ctaMetni}
-            </Link>
-
-            <ul className="flex flex-col gap-3 flex-1">
-              {paket.ozellikler.map((o) => (
-                <li key={o} className="flex items-start gap-2.5">
-                  <svg className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm text-gray-700 leading-snug">{o}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Karşılaştırma */}
@@ -178,26 +199,24 @@ export default function TeklifPaketiSayfasi() {
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="text-left px-6 py-3 font-semibold text-gray-600 w-2/5">Özellik</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-600">Ücretsiz</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-600">Başlangıç</th>
-                <th className="text-center px-4 py-3 font-semibold text-blue-700 bg-blue-50">Standart</th>
-                <th className="text-center px-4 py-3 font-semibold text-purple-700">Pro</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-600">Temel Paket</th>
+                <th className="text-center px-4 py-3 font-semibold text-teal-700 bg-teal-50">Kurumsal Paket</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {[
-                ["Teklif hakkı",          "2",        "5",       "15",          "Sınırsız"],
-                ["Geçerlilik",            "Tek sef.", "Süresiz", "Süresiz",     "Aylık yenileme"],
-                ["Teklif takip paneli",   "✓",        "✓",       "✓",           "✓"],
-                ["Öncelikli bildirimler", "—",        "—",       "✓",           "✓"],
-                ["Teklif analitikleri",   "—",        "—",       "—",           "✓"],
-                ["Destek kanalı",         "E-posta",  "E-posta", "E-posta",     "Öncelikli"],
-              ].map(([ozellik, ucretsiz, baslangic, standart, pro]) => (
+                ["Teklif hakkı",          "2",        "1",       "Sınırsız"],
+                ["Geçerlilik",            "Tek sef.", "Süresiz", "Aylık yenileme"],
+                ["Teklif takip paneli",   "✓",        "✓",       "✓"],
+                ["Öncelikli bildirimler", "—",        "—",       "✓"],
+                ["Teklif analitikleri",   "—",        "—",       "✓"],
+                ["Destek kanalı",         "E-posta",  "E-posta", "Öncelikli"],
+              ].map(([ozellik, ucretsiz, temel, kurumsal]) => (
                 <tr key={ozellik} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-3.5 text-gray-700 font-medium">{ozellik}</td>
                   <td className="px-4 py-3.5 text-center text-gray-400">{ucretsiz}</td>
-                  <td className="px-4 py-3.5 text-center text-gray-600">{baslangic}</td>
-                  <td className="px-4 py-3.5 text-center text-blue-700 font-semibold bg-blue-50/50">{standart}</td>
-                  <td className="px-4 py-3.5 text-center text-purple-700">{pro}</td>
+                  <td className="px-4 py-3.5 text-center text-gray-600">{temel}</td>
+                  <td className="px-4 py-3.5 text-center text-teal-700 font-semibold bg-teal-50/50">{kurumsal}</td>
                 </tr>
               ))}
             </tbody>
@@ -215,16 +234,20 @@ export default function TeklifPaketiSayfasi() {
               c: "Hesap oluştururken otomatik olarak 2 ücretsiz teklif hakkı tanınır. Bu haklar herhangi bir ihaleye teklif verdiğinizde otomatik düşer.",
             },
             {
-              s: "Başlangıç veya Standart paketlerdeki haklar ne zaman sona erer?",
-              c: "Bu paketlerdeki haklar süresizdir. Satın aldığınız an aktive edilir ve siz kullanana kadar hesabınızda kalır.",
+              s: "Temel Paket'teki hak ne zaman sona erer?",
+              c: "Temel Paket'teki hak süresizdir. Satın aldığınız an aktive edilir ve siz kullanana kadar hesabınızda kalır.",
             },
             {
-              s: "Pro paket aylık mı ücretlendirilir?",
-              c: "Evet, Pro paket aylık abonelik modeliyle çalışır. İptal ederseniz dönem sonuna kadar sınırsız teklif hakkınız devam eder.",
+              s: "Kurumsal Paket aylık mı ücretlendirilir?",
+              c: "Evet, Kurumsal Paket aylık abonelik modeliyle çalışır. İptal ederseniz dönem sonuna kadar sınırsız teklif hakkınız devam eder.",
             },
             {
-              s: "Birden fazla paket satın alabilir miyim?",
-              c: "Evet, Başlangıç ve Standart paketleri dilediğiniz kadar satın alabilirsiniz. Haklar toplanarak hesabınıza eklenir.",
+              s: "Performans İndirimi nasıl kazanılır?",
+              c: "Sınırsız (Kurumsal Paket) teklif hakkına sahip, en az 10 yorumu olan ve ortalama puanı 4,5 ve üzeri olan müteahhitlere teklif paketi ücretlerinde otomatik olarak %50 indirim uygulanır.",
+            },
+            {
+              s: "Birden fazla Temel Paket satın alabilir miyim?",
+              c: "Evet, Temel Paket'i dilediğiniz kadar satın alabilirsiniz. Haklar toplanarak hesabınıza eklenir.",
             },
           ].map((faq) => (
             <div key={faq.s} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">

@@ -1,5 +1,5 @@
 import type { PlanTuru } from "./types";
-import { PLAN_MAKS_IHALE_GUNU } from "./plan-limitleri";
+import { PLAN_TOPLAM_MAKS_IHALE_GUNU } from "./plan-limitleri";
 
 const UUID_DESENI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -60,13 +60,14 @@ export function formatTarih(tarih: string): string {
   });
 }
 
-// Toplam ihale süresi uzatma sınırı (gün). Premium/Kurumsal sınırları
-// PLAN_MAKS_IHALE_GUNU'ndan (tek kaynak, ihale-olustur ile paylaşılır) gelir;
-// Ücretsiz planın toplam uzatma sınırı ayrıca 30 gün olarak belirlenmiştir.
+// Toplam ihale süresi uzatma sınırı (gün) — ilk süre + ekstra uzatma.
+// Premium/Kurumsal sınırları PLAN_TOPLAM_MAKS_IHALE_GUNU'ndan (tek kaynak,
+// ihale-olustur ile paylaşılır) gelir; Ücretsiz planın toplam uzatma
+// sınırı ayrıca 30 gün olarak belirlenmiştir.
 export const PLAN_UZATMA_LIMITI: Partial<Record<PlanTuru, number>> = {
   ucretsiz: 30,
-  premium: PLAN_MAKS_IHALE_GUNU.premium,
-  kurumsal: PLAN_MAKS_IHALE_GUNU.kurumsal,
+  premium: PLAN_TOPLAM_MAKS_IHALE_GUNU.premium,
+  kurumsal: PLAN_TOPLAM_MAKS_IHALE_GUNU.kurumsal,
 };
 
 export function gunFarki(baslangic: string, bitis: string): number {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
-import { PLAN_MAKS_IHALE_GUNU } from "@/lib/plan-limitleri";
+import { PLAN_ILK_IHALE_GUNU } from "@/lib/plan-limitleri";
 import type { PlanTuru, MulkiyetDurumu } from "@/lib/types";
 
 const TASLAK_ANAHTARI = "ihale-olustur-taslak";
@@ -59,7 +59,7 @@ const ILLER = [
 ];
 
 function maxBitisTarihi(planTuru: string): string {
-  const maxGun = PLAN_MAKS_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_MAKS_IHALE_GUNU.ucretsiz;
+  const maxGun = PLAN_ILK_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_ILK_IHALE_GUNU.ucretsiz;
   const d = new Date();
   d.setDate(d.getDate() + maxGun);
   return d.toISOString().split("T")[0];
@@ -196,6 +196,21 @@ export default function IhaleOlustur() {
     }
     const kullaniciId = session.user.id;
 
+    // Ücretsiz plandaki 1 ihale hakkı tek kullanımlıktır. Sayfa açılışında
+    // yüklenen planTuru/state eski (stale) olabileceğinden burada tekrar,
+    // taze bir sorguyla kontrol edilir.
+    if (planTuru === "ucretsiz") {
+      const { data: kullaniciData } = await supabase
+        .from("kullanicilar")
+        .select("ucretsiz_ihale_hakki_kullanildi")
+        .eq("id", kullaniciId)
+        .single();
+      if (kullaniciData?.ucretsiz_ihale_hakki_kullanildi) {
+        setHata("Ücretsiz ihale hakkınızı kullandınız, devam etmek için Premium'a geçin.");
+        return;
+      }
+    }
+
     const eksik = dogrula();
     if (eksik.length > 0) {
       setEksikAlanlar(eksik);
@@ -241,6 +256,15 @@ export default function IhaleOlustur() {
       setHata(mesaj);
       setYukleniyor(false);
       return;
+    }
+
+    // Ücretsiz plan: ilk (ve tek) ihale hakkı kullanıldı olarak işaretlenir.
+    if (planTuru === "ucretsiz") {
+      const { error: hakError } = await supabase
+        .from("kullanicilar")
+        .update({ ucretsiz_ihale_hakki_kullanildi: true })
+        .eq("id", kullaniciId);
+      if (hakError) console.error("Ücretsiz ihale hakkı işaretlenemedi:", hakError.message);
     }
 
     // 2. Dosyaları Storage'a yükle ve belgeler tablosuna kaydet
@@ -640,9 +664,9 @@ export default function IhaleOlustur() {
               />
               <p className="text-xs text-amber-600 mt-1">
                 {planTuru === "ucretsiz"
-                  ? `Ücretsiz planda en fazla ${PLAN_MAKS_IHALE_GUNU.ucretsiz} gün seçilebilir.`
+                  ? `Ücretsiz planda en fazla ${PLAN_ILK_IHALE_GUNU.ucretsiz} gün seçilebilir.`
                   : `${planTuru === "kurumsal" ? "Kurumsal" : "Premium"} planda en fazla ${
-                      PLAN_MAKS_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_MAKS_IHALE_GUNU.ucretsiz
+                      PLAN_ILK_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_ILK_IHALE_GUNU.ucretsiz
                     } gün seçilebilir.`}
               </p>
               <p className="text-xs text-gray-400 mt-1">

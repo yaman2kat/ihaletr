@@ -11,11 +11,10 @@ const PAKET: Record<string, {
   plan?: string;
   teklif_hak?: number;
 }> = {
-  premium:   { fiyat: "500.00",  aciklama: "Premium Üyelik (1 ay)",    tip: "plan",   plan: "premium"  },
-  kurumsal:  { fiyat: "2499.00", aciklama: "Kurumsal Üyelik (1 ay)",   tip: "plan",   plan: "kurumsal" },
-  baslangic: { fiyat: "299.00",  aciklama: "Başlangıç Teklif Paketi",  tip: "teklif", teklif_hak: 5    },
-  standart:  { fiyat: "699.00",  aciklama: "Standart Teklif Paketi",   tip: "teklif", teklif_hak: 15   },
-  pro:       { fiyat: "1499.00", aciklama: "Pro Teklif Paketi (1 ay)", tip: "teklif", teklif_hak: 99999 },
+  premium:           { fiyat: "499.00",  aciklama: "Premium Üyelik (1 ay)",     tip: "plan",   plan: "premium"  },
+  kurumsal:          { fiyat: "2499.00", aciklama: "Kurumsal Üyelik (1 ay)",    tip: "plan",   plan: "kurumsal" },
+  "teklif-temel":    { fiyat: "699.00",  aciklama: "Temel Paket (1 teklif hakkı)",        tip: "teklif", teklif_hak: 1     },
+  "teklif-kurumsal": { fiyat: "2299.00", aciklama: "Kurumsal Paket (sınırsız, 1 ay)",     tip: "teklif", teklif_hak: 99999 },
 };
 
 // Kart deneme (card testing) saldirisina karsi: bir kullanicinin belirli
@@ -115,10 +114,26 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-real-ip") ??
       "127.0.0.1";
 
+    // ─── Performans indirimi: müteahhit teklif paketlerinde, sınırsız
+    // paket sahibi + en az 10 yorum + 4.5 üzeri ortalama puan şartlarını
+    // sağlayan kullanıcılara %50 indirim uygulanır. İstemciden GELMEZ —
+    // fiyat kaçırma (client'ta indirim uygulanmış gösterip gerçekte
+    // uygulanmamış fiyat gönderme) riskine karşı burada, servis rolüyle,
+    // sunucu tarafında yeniden hesaplanır.
+    let fiyat = paketBilgi.fiyat;
+    if (paketBilgi.tip === "teklif") {
+      const { data: indirimVarMi } = await db.rpc("performans_indirimi_uygulanir_mi", {
+        p_kullanici_id: kullaniciId,
+      });
+      if (indirimVarMi) {
+        fiyat = (parseFloat(paketBilgi.fiyat) / 2).toFixed(2);
+      }
+    }
+
     // ─── Iyzico ödeme ───────────────────────────────────────────────────────
     const sonuc = await odemeOlustur({
       paket,
-      fiyat:    paketBilgi.fiyat,
+      fiyat,
       aciklama: paketBilgi.aciklama,
       kart,
       kullaniciId,

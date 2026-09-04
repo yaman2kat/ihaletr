@@ -154,6 +154,7 @@ export interface Kullanici {
   plan_turu?: PlanTuru;
   premium_bitis_tarihi?: string | null;
   kalan_teklif_hakki?: number;
+  ucretsiz_ihale_hakki_kullanildi?: boolean;
   toplam_teklif_sayisi?: number;
   davet_kodu?: string | null;
   davet_eden_id?: string | null;
