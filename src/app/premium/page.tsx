@@ -118,7 +118,6 @@ export default function PremiumSayfasi() {
         <h1 className="text-4xl font-bold text-gray-900 mb-4">Planınızı Seçin</h1>
         <p className="text-gray-500 text-lg max-w-xl mx-auto leading-relaxed">
           Ücretsiz başlayın, ihtiyacınız arttıkça yükseltin.
-          Tüm planlar 14 gün iade güvencesiyle gelir.
         </p>
       </div>
 
