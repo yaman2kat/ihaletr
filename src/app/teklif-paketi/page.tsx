@@ -73,6 +73,9 @@ const HAK_CLS: Record<string, string> = {
 
 export default function TeklifPaketiSayfasi() {
   const [performansIndirimi, setPerformansIndirimi] = useState(false);
+  // null: bilinmiyor (giriş yapılmamış / henüz yüklenmedi) — bu durumda
+  // "hakkınız doldu" uyarısı yanlışlıkla gösterilmesin diye gizli tutulur.
+  const [kalanTeklifHakki, setKalanTeklifHakki] = useState<number | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -80,6 +83,8 @@ export default function TeklifPaketiSayfasi() {
       if (!session?.user) return;
       supabase.rpc("performans_indirimi_uygulanir_mi", { p_kullanici_id: session.user.id })
         .then(({ data }) => setPerformansIndirimi(Boolean(data)));
+      supabase.from("kullanicilar").select("kalan_teklif_hakki").eq("id", session.user.id).single()
+        .then(({ data }) => setKalanTeklifHakki(data?.kalan_teklif_hakki ?? null));
     });
   }, []);
 
@@ -97,14 +102,16 @@ export default function TeklifPaketiSayfasi() {
           Daha fazlası için aşağıdaki paketlerden birini seçin.
         </p>
 
-        {/* Mevcut hak göstergesi */}
-        <div className="inline-flex items-center gap-2 mt-6 bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium px-5 py-2.5 rounded-full">
-          <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          Teklif hakkınız doldu. Teklif vermek için bir paket seçin.
-        </div>
+        {/* Mevcut hak göstergesi — yalnızca kalan hak 0 ise gösterilir */}
+        {kalanTeklifHakki === 0 && (
+          <div className="inline-flex items-center gap-2 mt-6 bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium px-5 py-2.5 rounded-full">
+            <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Teklif hakkınız doldu. Teklif vermek için bir paket seçin.
+          </div>
+        )}
 
         {performansIndirimi && (
           <div className="inline-flex items-center gap-2 mt-4 ml-3 bg-green-50 border border-green-200 text-green-800 text-sm font-bold px-5 py-2.5 rounded-full">
