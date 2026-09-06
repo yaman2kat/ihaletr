@@ -43,8 +43,8 @@ const KATEGORILER: Kategori[] = [
         c: "Teklif vermek \"teklif hakkı\" tüketir. Her hesaba tanınan ücretsiz haklar bittiğinde, Teklif Paketi sayfasından Temel Paket (1 hak, tek seferlik) veya sınırsız aylık Kurumsal Paket'ten birini satın alarak teklif vermeye devam edebilirsiniz.",
       },
       {
-        s: "İlk 2 teklifim neden ücretsiz?",
-        c: "Yeni açılan her hesaba otomatik olarak 2 ücretsiz teklif hakkı tanımlanır; böylece bir paket satın almadan önce platformu ve teklif verme sürecini deneyebilirsiniz. Bu haklar herhangi bir ihaleye teklif verdiğinizde otomatik olarak düşer.",
+        s: "İlk teklifim neden ücretsiz?",
+        c: "Yeni açılan her hesaba, ilk teklifiniz ücretsiz olacak şekilde otomatik olarak 1 teklif hakkı tanımlanır; böylece bir paket satın almadan önce platformu ve teklif verme sürecini deneyebilirsiniz. Bu hak herhangi bir ihaleye teklif verdiğinizde otomatik olarak düşer.",
       },
       {
         s: "Teklif hakkım biterse ne olur?",

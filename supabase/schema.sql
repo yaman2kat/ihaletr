@@ -201,14 +201,16 @@ BEGIN
   FROM public.kullanicilar
   WHERE davet_kodu = NEW.raw_user_meta_data->>'davet_referans_kodu';
 
-  INSERT INTO public.kullanicilar (id, email, ad_soyad, davet_kodu, davet_eden_id, hesap_turu)
+  INSERT INTO public.kullanicilar
+    (id, email, ad_soyad, davet_kodu, davet_eden_id, hesap_turu, kalan_teklif_hakki)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'ad_soyad', split_part(NEW.email, '@', 1)),
     public.gen_davet_kodu(),
     v_davet_eden_id,
-    v_hesap_turu
+    v_hesap_turu,
+    1
   );
 
   INSERT INTO public.bildirim_tercihleri (kullanici_id) VALUES (NEW.id) ON CONFLICT DO NOTHING;
@@ -681,6 +683,11 @@ ALTER TABLE public.kullanicilar
   ADD COLUMN IF NOT EXISTS premium_bitis_tarihi  timestamptz,
   ADD COLUMN IF NOT EXISTS kalan_teklif_hakki    integer NOT NULL DEFAULT 2,
   ADD COLUMN IF NOT EXISTS toplam_teklif_sayisi  integer NOT NULL DEFAULT 0;
+
+-- Ücretsiz teklif hakkı 2'den 1'e düşürüldü — yalnızca kolon varsayılanı
+-- değişir, mevcut kullanıcıların kalan_teklif_hakki değeri etkilenmez.
+ALTER TABLE public.kullanicilar
+  ALTER COLUMN kalan_teklif_hakki SET DEFAULT 1;
 
 -- Ücretsiz plandaki 1 ihale hakkı tek kullanımlıktır: kullanıcı ilk
 -- ihalesini yayınladığında bu alan true olur, ikinci deneme

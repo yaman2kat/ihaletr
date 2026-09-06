@@ -39,7 +39,7 @@ export default function MuteahhitPanel({ userId }: MuteahhitPanelProps) {
       ]);
 
       setTeklifler((teklifRes.data ?? []) as VerilenTeklif[]);
-      setKalanHak(profilRes.data?.kalan_teklif_hakki ?? 2);
+      setKalanHak(profilRes.data?.kalan_teklif_hakki ?? 1);
       setProfil((muteahhitRes.data as MuteahhitProfil) ?? null);
       setYukleniyor(false);
     }

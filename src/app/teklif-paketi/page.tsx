@@ -98,7 +98,7 @@ export default function TeklifPaketiSayfasi() {
         </span>
         <h1 className="text-4xl font-bold text-gray-900 mb-4">Teklif Hakkınızı Genişletin</h1>
         <p className="text-gray-500 text-lg max-w-xl mx-auto leading-relaxed">
-          Her kullanıcıya ücretsiz 2 teklif hakkı tanınır.
+          İlk teklifiniz ücretsizdir.
           Daha fazlası için aşağıdaki paketlerden birini seçin.
         </p>
 
@@ -212,7 +212,7 @@ export default function TeklifPaketiSayfasi() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {[
-                ["Teklif hakkı",          "2",        "1",       "Sınırsız"],
+                ["Teklif hakkı",          "1",        "1",       "Sınırsız"],
                 ["Geçerlilik",            "Tek sef.", "Süresiz", "Aylık yenileme"],
                 ["Teklif takip paneli",   "✓",        "✓",       "✓"],
                 ["Öncelikli bildirimler", "—",        "—",       "✓"],
@@ -237,8 +237,8 @@ export default function TeklifPaketiSayfasi() {
         <div className="flex flex-col gap-4">
           {[
             {
-              s: "Ücretsiz 2 teklif hakkı nasıl kullanılır?",
-              c: "Hesap oluştururken otomatik olarak 2 ücretsiz teklif hakkı tanınır. Bu haklar herhangi bir ihaleye teklif verdiğinizde otomatik düşer.",
+              s: "İlk teklifim neden ücretsiz?",
+              c: "Hesap oluştururken, ilk teklifiniz ücretsiz olacak şekilde otomatik olarak 1 teklif hakkı tanınır. Bu hak herhangi bir ihaleye teklif verdiğinizde otomatik düşer.",
             },
             {
               s: "Temel Paket'teki hak ne zaman sona erer?",
