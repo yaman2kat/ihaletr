@@ -366,7 +366,7 @@ function KilitliButon() {
         İhale Sonucunu Görüntüle
       </Link>
       <p className="text-xs text-gray-400 text-center">
-        Sonuçları görmek için Kurumsal plana geçin veya bu ihaleye teklif verin.
+        Sonuçları görmek için Kurumsal plana geçin.
       </p>
     </div>
   );
