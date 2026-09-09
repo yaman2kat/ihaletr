@@ -77,13 +77,16 @@ async function gonder(to: string, subject: string, html: string): Promise<void> 
 
 // 1) Yeni teklif alındı (ihale sahibine)
 export async function gonderYeniTeklifEmaili(opts: {
-  to: string; adSoyad: string; ihaleBaslik: string; ihaleId: string; tutar: number;
+  to: string; adSoyad: string; ihaleBaslik: string; ihaleId: string; tutar: number | null;
 }) {
+  const teklifAciklama = opts.tutar !== null
+    ? `<strong>${formatPara(opts.tutar)}</strong> tutarında yeni bir teklif verildi.`
+    : `yeni bir teklif dosyası yüklendi.`;
   const html = sablon({
     baslik: "Yeni bir teklif alındı",
     govdeHtml: `
       <p>Merhaba ${opts.adSoyad},</p>
-      <p><strong>${opts.ihaleBaslik}</strong> başlıklı ihalenize <strong>${formatPara(opts.tutar)}</strong> tutarında yeni bir teklif verildi.</p>`,
+      <p><strong>${opts.ihaleBaslik}</strong> başlıklı ihalenize ${teklifAciklama}</p>`,
     ctaMetin: "Teklifi Görüntüle",
     ctaLink: `${siteUrl()}/ihaleler/${opts.ihaleId}`,
   });

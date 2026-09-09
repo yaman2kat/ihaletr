@@ -4,14 +4,24 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import DosyaAlani from "@/components/DosyaAlani";
 import type { User } from "@supabase/supabase-js";
 
 interface Props {
   ihaleId: string;
+  kategori: string;
   baslangicFiyati: number;
   durum: string;
   kalanGun: number;
 }
+
+const TEKLIF_DOSYALARI_BUCKET = "ihale-teklif-dosyalari";
+
+// Kat Karşılığı / Kentsel Dönüşüm ihalelerinde net TL fiyat yerine
+// teklif dosyası (paylaşım oranı, kira yardımı vb. şartları içeren)
+// alınır; Yapı İnşaat / Bakım & Onarım ihalelerinde mevcut nakit teklif
+// akışı aynen kalır, dosya yükleme yalnızca opsiyonel bir ek olur.
+const NAKIT_KATEGORILER = new Set(["Yapı İnşaat", "Bakım & Onarım"]);
 
 function formatPara(tutar: number) {
   return new Intl.NumberFormat("tr-TR", {
@@ -33,18 +43,21 @@ function hakRenk(hak: number): string {
   return "text-green-600";
 }
 
-export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun }: Props) {
+export default function TeklifKutusu({ ihaleId, kategori, baslangicFiyati, durum, kalanGun }: Props) {
   const router = useRouter();
   const taslakAnahtari = `teklif-taslak-${ihaleId}`;
+  const paraliMi = NAKIT_KATEGORILER.has(kategori);
 
   const [kullanici,   setKullanici]   = useState<User | null | undefined>(undefined);
   const [kalanHak,    setKalanHak]    = useState<number | null>(null);
   const [hakYuklendi, setHakYuklendi] = useState(false);
   const [tutar,       setTutar]       = useState("");
+  const [teklifDosyasi,   setTeklifDosyasi]   = useState<File | null>(null);
+  const [alternatifProje, setAlternatifProje] = useState<File | null>(null);
   const [yukleniyor,  setYukleniyor]  = useState(false);
   const [hata,        setHata]        = useState("");
   const [basarili,    setBasarili]    = useState(false);
-  const [gonderilenTutar, setGonderilenTutar] = useState(0);
+  const [gonderilenTutar, setGonderilenTutar] = useState<number | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -94,12 +107,17 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!tutar) return;
+    if (paraliMi && !tutar) return;
+    if (!paraliMi && !teklifDosyasi) {
+      setHata("Bu ihale türünde net rakam yerine teklif dosyanızı yüklemeniz gerekir.");
+      return;
+    }
 
     // Giriş yapılmamışsa: girilen tutar zaten localStorage'da taslak
     // olarak tutuluyor, kayıt/giriş sonrası bu sayfaya dönüldüğünde
     // otomatik geri yüklenir — kullanıcının tek yapması gereken
-    // "Teklif Ver"e tekrar basmak.
+    // "Teklif Ver"e tekrar basmak. Dosyalar taslakta tutulmaz, giriş
+    // sonrası tekrar seçilmesi gerekir.
     if (!kullanici) {
       router.push(`/kayit?next=${encodeURIComponent(`/ihaleler/${ihaleId}`)}`);
       return;
@@ -107,17 +125,48 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
 
     if (kalanHak !== null && kalanHak <= 0) { setHata("Teklif hakkınız kalmadı."); return; }
 
-    const tutarNum = Number(tutar);
-    if (tutarNum <= 0) { setHata("Geçerli bir tutar girin."); return; }
+    let tutarNum: number | null = null;
+    if (paraliMi) {
+      tutarNum = Number(tutar);
+      if (tutarNum <= 0) { setHata("Geçerli bir tutar girin."); return; }
+    }
 
     setHata("");
     setYukleniyor(true);
     const supabase = createClient();
 
+    // Dosyalar once ozel (private) bucket'a yuklenir -- teklif satiri
+    // yalnizca yol (path) tasir, public URL degil (bkz. migration).
+    let teklifDosyasiYolu: string | null = null;
+    let alternatifProjeYolu: string | null = null;
+    try {
+      if (teklifDosyasi) {
+        const yol = `${ihaleId}/${kullanici.id}/teklif-dosyasi-${Date.now()}-${teklifDosyasi.name}`;
+        const { error: yukleHatasi } = await supabase.storage
+          .from(TEKLIF_DOSYALARI_BUCKET).upload(yol, teklifDosyasi, { upsert: false });
+        if (yukleHatasi) throw new Error("Teklif dosyası yüklenemedi: " + yukleHatasi.message);
+        teklifDosyasiYolu = yol;
+      }
+      if (alternatifProje) {
+        const yol = `${ihaleId}/${kullanici.id}/alternatif-proje-${Date.now()}-${alternatifProje.name}`;
+        const { error: yukleHatasi } = await supabase.storage
+          .from(TEKLIF_DOSYALARI_BUCKET).upload(yol, alternatifProje, { upsert: false });
+        if (yukleHatasi) throw new Error("Alternatif proje dosyası yüklenemedi: " + yukleHatasi.message);
+        alternatifProjeYolu = yol;
+      }
+    } catch (err) {
+      setYukleniyor(false);
+      setHata(err instanceof Error ? err.message : "Dosya yüklenemedi.");
+      return;
+    }
+
     const { error } = await supabase.from("teklifler").insert({
-      ihale_id:     ihaleId,
-      kullanici_id: kullanici.id,
-      tutar:        tutarNum,
+      ihale_id:             ihaleId,
+      kullanici_id:         kullanici.id,
+      tutar:                tutarNum,
+      teklif_turu:          paraliMi ? "nakit" : "dosya",
+      teklif_dosyasi_url:   teklifDosyasiYolu,
+      alternatif_proje_url: alternatifProjeYolu,
     });
 
     setYukleniyor(false);
@@ -143,6 +192,8 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     setGonderilenTutar(tutarNum);
     setBasarili(true);
     setTutar("");
+    setTeklifDosyasi(null);
+    setAlternatifProje(null);
 
     // İhale sahibine e-posta bildirimi — akışı bloklamadan (fire-and-forget).
     fetch("/api/email/yeni-teklif", {
@@ -207,7 +258,11 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
     return (
       <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-3 text-center">
         <p className="text-green-700 font-semibold text-sm">Teklifiniz alındı!</p>
-        <p className="text-green-600 text-xs mt-1">{formatPara(gonderilenTutar)} tutarında teklif gönderildi.</p>
+        <p className="text-green-600 text-xs mt-1">
+          {gonderilenTutar !== null
+            ? `${formatPara(gonderilenTutar)} tutarında teklif gönderildi.`
+            : "Teklif dosyanız başarıyla gönderildi."}
+        </p>
         {kalanHak !== null && kalanHak < SINIRSIN_ESIK && (
           <p className="text-xs text-gray-400 mt-2">Kalan hak: {kalanHak}</p>
         )}
@@ -241,15 +296,54 @@ export default function TeklifKutusu({ ihaleId, baslangicFiyati, durum, kalanGun
         <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg p-2.5 mb-3">{hata}</div>
       )}
 
+      {paraliMi && (
+        <div className="mb-3">
+          <label className="block text-xs text-gray-500 mb-1.5">Teklif Tutarınız (₺)</label>
+          <input
+            type="number" required min="1" placeholder={String(baslangicFiyati)}
+            value={tutar} onChange={(e) => setTutar(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <p className="text-xs text-gray-400 mt-1">Başlangıç: {formatPara(baslangicFiyati)}</p>
+        </div>
+      )}
+
+      {!paraliMi && (
+        <p className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-2">
+          Bu ihale türünde net rakam yerine teklif dosyanızı yükleyiniz. Paylaşım oranı, süre ve tüm şartlarınızı bu dosyada belirtiniz.
+        </p>
+      )}
+
       <div className="mb-3">
-        <label className="block text-xs text-gray-500 mb-1.5">Teklif Tutarınız (₺)</label>
-        <input
-          type="number" required min="1" placeholder={String(baslangicFiyati)}
-          value={tutar} onChange={(e) => setTutar(e.target.value)}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <DosyaAlani
+          label="Teklif Dosyası"
+          kabul=".pdf,.doc,.docx,.xls,.xlsx"
+          zorunlu={!paraliMi}
+          maksBoyutMB={20}
+          dosya={teklifDosyasi}
+          onChange={setTeklifDosyasi}
         />
-        <p className="text-xs text-gray-400 mt-1">Başlangıç: {formatPara(baslangicFiyati)}</p>
       </div>
+
+      <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-2">
+        İhalede proje yoksa kendi projenizi yükleyiniz. Proje varsa ve daha iyi olacağını düşündüğünüz alternatif bir çiziminiz varsa öneri olarak yükleyebilirsiniz. Bu durumda teklif dosyanızda alternatif projeye ait ayrı fiyatlandırmanızı da belirtiniz.
+      </p>
+
+      <div className="mb-3">
+        <DosyaAlani
+          label="Alternatif Proje Önerisi"
+          kabul=".pdf,.dwg"
+          maksBoyutMB={40}
+          dosya={alternatifProje}
+          onChange={setAlternatifProje}
+        />
+      </div>
+
+      <p className="text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 mb-3">
+        Yüklediğiniz teklif dosyası ve projeler, ihale süresi boyunca hiç kimse tarafından görüntülenemez.
+        İhale tamamlandığında: ihale sahibi tüm dosyalarınızı ve firma bilgilerinizi görebilir.
+        Diğer katılımcı müteahhitler ve Kurumsal plan sahipleri ise dosyaları firma ismi maskelenmiş şekilde görebilir.
+      </p>
 
       <button
         type="submit" disabled={yukleniyor}

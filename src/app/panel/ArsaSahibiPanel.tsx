@@ -16,7 +16,7 @@ const PLAN_BADGE: Record<PlanTuru, { etiket: string; cls: string }> = {
 interface GelenTeklif {
   id: string;
   ihale_id: string;
-  tutar: number;
+  tutar: number | null;
   durum: string;
   created_at: string;
   ihale?: { baslik: string };
@@ -421,7 +421,9 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                         {t.teklif_veren?.firma_adi || t.teklif_veren?.ad_soyad || "Misafir"}
                       </td>
                       <td className="px-5 py-4 hidden sm:table-cell">
-                        <span className="font-semibold text-gray-900">{paraBirim(t.tutar)}</span>
+                        <span className="font-semibold text-gray-900">
+                          {t.tutar !== null ? paraBirim(t.tutar) : <span className="text-gray-400 italic font-normal">Dosya ile teklif</span>}
+                        </span>
                       </td>
                       <td className="px-5 py-4 hidden md:table-cell text-gray-500 text-xs">
                         {tarihFormat(t.created_at)}

@@ -307,6 +307,7 @@ export default async function IhaleDetay({
               {/* Teklif Ver */}
               <TeklifKutusu
                 ihaleId={ihale.id}
+                kategori={ihale.kategori}
                 baslangicFiyati={ihale.baslangic_fiyati}
                 durum={ihale.durum}
                 kalanGun={kalanGun}

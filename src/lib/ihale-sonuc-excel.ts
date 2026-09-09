@@ -15,11 +15,11 @@ export async function ihaleSonucExcelOlustur(veri: IhaleSonucVerisi): Promise<Bl
   ];
   sheet.getRow(1).font = { bold: true };
 
-  const siraliFirmalar = [...veri.firmalar].sort((a, b) => a.tutar - b.tutar);
+  const siraliFirmalar = [...veri.firmalar].sort((a, b) => (a.tutar ?? Infinity) - (b.tutar ?? Infinity));
   siraliFirmalar.forEach((f) => {
     sheet.addRow({
       firma: f.firmaAdi,
-      tutar: f.tutar,
+      tutar: f.tutar ?? "Dosya ile teklif",
       puan: f.ortalamaPuan !== null ? Number(f.ortalamaPuan.toFixed(1)) : "—",
       yorumSayisi: f.yorumSayisi,
     });

@@ -475,6 +475,27 @@ CREATE TRIGGER on_teklif_degisti
   AFTER INSERT OR UPDATE OR DELETE ON public.teklifler
   FOR EACH ROW EXECUTE FUNCTION public.guncelle_mevcut_teklif();
 
+-- İhale kategorisine göre farklı teklif verme sistemi: Kat Karşılığı /
+-- Kentsel Dönüşüm ihalelerinde net TL yerine dosya tabanlı teklif verilir
+-- (bkz. ihale_kategorisine_gore_teklif_sistemi_migration.sql).
+ALTER TABLE public.teklifler
+  ADD COLUMN IF NOT EXISTS teklif_turu          text NOT NULL DEFAULT 'nakit',
+  ADD COLUMN IF NOT EXISTS teklif_dosyasi_url    text,
+  ADD COLUMN IF NOT EXISTS alternatif_proje_url  text;
+
+ALTER TABLE public.teklifler ALTER COLUMN tutar DROP NOT NULL;
+
+ALTER TABLE public.teklifler DROP CONSTRAINT IF EXISTS teklifler_teklif_turu_check;
+ALTER TABLE public.teklifler ADD CONSTRAINT teklifler_teklif_turu_check
+  CHECK (teklif_turu IN ('nakit', 'dosya'));
+
+ALTER TABLE public.teklifler DROP CONSTRAINT IF EXISTS teklifler_turu_veri_tutarli;
+ALTER TABLE public.teklifler ADD CONSTRAINT teklifler_turu_veri_tutarli
+  CHECK (
+    (teklif_turu = 'nakit' AND tutar IS NOT NULL)
+    OR (teklif_turu = 'dosya' AND teklif_dosyasi_url IS NOT NULL)
+  );
+
 -- ------------------------------------------------------------
 -- 4. DANIŞMANLAR
 -- Yalnızca admin tarafından eklenir.
@@ -986,6 +1007,42 @@ CREATE POLICY "Sadece admin tapu belgesini gorebilir"
 CREATE POLICY "Herkes tapu belgesi yukleyebilir"
   ON storage.objects FOR INSERT WITH CHECK (
     bucket_id = 'ihale-tapu-belgeleri'
+  );
+
+-- ------------------------------------------------------------
+-- 9b. TEKLİF DOSYALARI — ÖZEL (PRIVATE) STORAGE BUCKET
+-- "ihale-belgeleri" gibi public değil: teklif dosyası/alternatif proje,
+-- ihale bitene kadar (ve bittikten sonra da yalnızca sahibi/katılımcı/
+-- Kurumsal plan) dışında kimseye açılmamalı. Obje yolu:
+-- {ihale_id}/{kullanici_id}/... — bkz. ihale_kategorisine_gore_
+-- teklif_sistemi_migration.sql (yetki kuralı ihale_teklif_listesi_
+-- maskeli() ile birebir aynıdır).
+-- ------------------------------------------------------------
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('ihale-teklif-dosyalari', 'ihale-teklif-dosyalari', false)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Giris yapan kendi teklif dosyasini yukleyebilir"
+  ON storage.objects FOR INSERT WITH CHECK (
+    bucket_id = 'ihale-teklif-dosyalari'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+CREATE POLICY "Teklif dosyasi sadece ihale bitince yetkiliye acik"
+  ON storage.objects FOR SELECT USING (
+    bucket_id = 'ihale-teklif-dosyalari'
+    AND EXISTS (
+      SELECT 1 FROM public.ihaleler i
+      WHERE i.id::text = (storage.foldername(name))[1]
+        AND (i.durum = 'tamamlandi' OR (i.durum = 'aktif' AND i.bitis_tarihi < CURRENT_DATE))
+        AND (
+          i.olusturan_id = auth.uid()
+          OR EXISTS (SELECT 1 FROM public.teklifler t WHERE t.ihale_id = i.id AND t.kullanici_id = auth.uid())
+          OR EXISTS (SELECT 1 FROM public.kullanicilar k WHERE k.id = auth.uid() AND k.plan_turu = 'kurumsal')
+        )
+    )
   );
 
 -- ------------------------------------------------------------

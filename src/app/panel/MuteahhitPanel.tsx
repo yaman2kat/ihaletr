@@ -9,7 +9,7 @@ import { tarihFormat, paraBirim } from "./utils";
 interface VerilenTeklif {
   id: string;
   ihale_id: string;
-  tutar: number;
+  tutar: number | null;
   durum: string;
   created_at: string;
   ihale?: { baslik: string; bitis_tarihi: string; durum: IhaleDurumu };
@@ -186,7 +186,9 @@ export default function MuteahhitPanel({ userId }: MuteahhitPanelProps) {
                       )}
                     </td>
                     <td className="px-5 py-4 hidden sm:table-cell">
-                      <span className="font-semibold text-gray-900">{paraBirim(t.tutar)}</span>
+                      <span className="font-semibold text-gray-900">
+                        {t.tutar !== null ? paraBirim(t.tutar) : <span className="text-gray-400 italic font-normal">Dosya ile teklif</span>}
+                      </span>
                     </td>
                     <td className="px-5 py-4 hidden md:table-cell text-gray-500 text-xs">
                       {tarihFormat(t.created_at)}

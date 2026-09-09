@@ -167,11 +167,16 @@ export interface Kullanici {
   created_at: string;
 }
 
+export type TeklifTuru = "nakit" | "dosya";
+
 export interface Teklif {
   id: string;
   ihale_id: string;
   kullanici_id: string;
-  tutar: number;
+  tutar: number | null;
+  teklif_turu?: TeklifTuru;
+  teklif_dosyasi_url?: string | null;
+  alternatif_proje_url?: string | null;
   created_at: string;
 }
 

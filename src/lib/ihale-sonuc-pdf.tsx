@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
 function IhaleSonucPdfBelgesi({ veri }: { veri: IhaleSonucVerisi }) {
   fontlariKaydet();
   const ozet = ozetIstatistikHesapla(veri.firmalar);
-  const siraliFirmalar = [...veri.firmalar].sort((a, b) => a.tutar - b.tutar);
+  const siraliFirmalar = [...veri.firmalar].sort((a, b) => (a.tutar ?? Infinity) - (b.tutar ?? Infinity));
 
   return (
     <Document title={`${veri.ihaleBaslik} - Ihale Sonuc Raporu`}>
@@ -57,7 +57,7 @@ function IhaleSonucPdfBelgesi({ veri }: { veri: IhaleSonucVerisi }) {
         {siraliFirmalar.map((f, i) => (
           <View key={i} style={styles.tabloSatiri}>
             <Text style={styles.cFirma}>{f.firmaAdi}</Text>
-            <Text style={styles.cTutar}>{formatPara(f.tutar)}</Text>
+            <Text style={styles.cTutar}>{f.tutar !== null ? formatPara(f.tutar) : "Dosya ile teklif"}</Text>
             <Text style={styles.cPuan}>
               {f.ortalamaPuan !== null ? `${f.ortalamaPuan.toFixed(1)} (${f.yorumSayisi})` : "—"}
             </Text>

@@ -13,7 +13,9 @@ export function gercekIhaleIdMi(id: string): boolean {
 
 export interface SonucFirma {
   firmaAdi: string;
-  tutar: number;
+  /** Kat Karşılığı/Kentsel Dönüşüm gibi dosya tabanlı tekliflerde tutar
+   * bulunmaz -- null, "Dosya ile teklif" olarak gösterilir. */
+  tutar: number | null;
   muteahhitId?: string;
   ortalamaPuan: number | null;
   yorumSayisi: number;
@@ -21,6 +23,13 @@ export interface SonucFirma {
    * kullanici_id'si ve mevcut durumu -- "Kazandi olarak isaretle" butonu icin. */
   kullaniciId?: string;
   teklifDurumu?: "beklemede" | "kabul_edildi" | "reddedildi";
+  /** Sunucu tarafinda hesaplanmis "bu satir kazandi mi" bayragi -- maskeli
+   * tier'da kullanici_id hic donmedigi ve dosya turu tekliflerde tutar
+   * eslesmesi calismadigi icin kazanan satiri boylece guvenle bulunur. */
+  kazandiMi?: boolean;
+  teklifTuru?: "nakit" | "dosya";
+  teklifDosyasiPath?: string | null;
+  alternatifProjePath?: string | null;
 }
 
 export interface IhaleSonucVerisi {
@@ -39,8 +48,8 @@ export interface OzetIstatistik {
 }
 
 export function ozetIstatistikHesapla(firmalar: SonucFirma[]): OzetIstatistik | null {
-  if (firmalar.length === 0) return null;
-  const tutarlar = firmalar.map((f) => f.tutar);
+  const tutarlar = firmalar.map((f) => f.tutar).filter((t): t is number => t !== null);
+  if (tutarlar.length === 0) return null;
   return {
     enYuksek: Math.max(...tutarlar),
     enDusuk: Math.min(...tutarlar),

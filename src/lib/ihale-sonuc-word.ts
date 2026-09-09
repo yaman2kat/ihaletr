@@ -13,7 +13,7 @@ function hucre(metin: string, kalin = false): TableCell {
 
 export async function ihaleSonucWordOlustur(veri: IhaleSonucVerisi): Promise<Blob> {
   const ozet = ozetIstatistikHesapla(veri.firmalar);
-  const siraliFirmalar = [...veri.firmalar].sort((a, b) => a.tutar - b.tutar);
+  const siraliFirmalar = [...veri.firmalar].sort((a, b) => (a.tutar ?? Infinity) - (b.tutar ?? Infinity));
 
   const basliklar = new TableRow({
     children: [hucre("Firma", true), hucre("Teklif Tutarı", true), hucre("Ortalama Puan", true)],
@@ -22,7 +22,7 @@ export async function ihaleSonucWordOlustur(veri: IhaleSonucVerisi): Promise<Blo
   const satirlar = siraliFirmalar.map((f) => new TableRow({
     children: [
       hucre(f.firmaAdi),
-      hucre(formatPara(f.tutar)),
+      hucre(f.tutar !== null ? formatPara(f.tutar) : "Dosya ile teklif"),
       hucre(f.ortalamaPuan !== null ? `${f.ortalamaPuan.toFixed(1)} (${f.yorumSayisi} yorum)` : "Henüz değerlendirme yok"),
     ],
   }));

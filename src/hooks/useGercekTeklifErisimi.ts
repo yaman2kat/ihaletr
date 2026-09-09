@@ -10,11 +10,19 @@ export interface TeklifFirma {
    * deanonimlestirmeyi imkansiz kilmak icin hicbir kimlik alani tasimaz. */
   kullanici_id?: string;
   muteahhit_id?: string;
-  tutar: number;
+  /** Dosya tabanlı (Kat Karşılığı/Kentsel Dönüşüm) tekliflerde null. */
+  tutar: number | null;
   kullanici_adi: string;
   ortalamaPuan: number | null;
   yorumSayisi: number;
   durum?: "beklemede" | "kabul_edildi" | "reddedildi";
+  /** Sunucu tarafında hesaplanmış "bu teklif kazandı mı" bayrağı --
+   * maskeli tier'da kullanici_id/durum hiç dönmediği için kazanan satırı
+   * bununla bulunur (tutar eşleşmesi dosya türü tekliflerde çalışmaz). */
+  kazandiMi?: boolean;
+  teklifTuru?: "nakit" | "dosya";
+  teklifDosyasiPath?: string | null;
+  alternatifProjePath?: string | null;
 }
 
 interface Sonuc {
@@ -59,9 +67,9 @@ export function useGercekTeklifErisimi(
       if (uid && olusturanId && uid === olusturanId) {
         const { data: teklifler } = await supabase
           .from("teklifler")
-          .select("kullanici_id, tutar, durum")
+          .select("kullanici_id, tutar, durum, teklif_turu, teklif_dosyasi_url, alternatif_proje_url")
           .eq("ihale_id", ihaleId)
-          .order("tutar", { ascending: true });
+          .order("tutar", { ascending: true, nullsFirst: false });
 
         const idler = [...new Set((teklifler ?? []).map((t) => t.kullanici_id))];
         const { data: kullanicilar } = idler.length > 0
@@ -93,6 +101,10 @@ export function useGercekTeklifErisimi(
             ortalamaPuan: puanlar.length ? puanlar.reduce((a, b) => a + b, 0) / puanlar.length : null,
             yorumSayisi: puanlar.length,
             durum: t.durum,
+            kazandiMi: t.durum === "kabul_edildi",
+            teklifTuru: t.teklif_turu,
+            teklifDosyasiPath: t.teklif_dosyasi_url,
+            alternatifProjePath: t.alternatif_proje_url,
           };
         });
 
@@ -122,21 +134,28 @@ export function useGercekTeklifErisimi(
       }
 
       if (maskeliMi) {
-        const [{ data: liste }, { data: kazananFiyatData }] = await Promise.all([
+        const [{ data: liste }, { data: kazananFiyatData }, { data: kazananVarMiData }] = await Promise.all([
           supabase.rpc("ihale_teklif_listesi_maskeli", { p_ihale_id: ihaleId }),
           supabase.rpc("ihale_kazanan_fiyat", { p_ihale_id: ihaleId }),
+          supabase.rpc("ihale_kazanan_var_mi", { p_ihale_id: ihaleId }),
         ]);
         const firmalar: TeklifFirma[] = (liste ?? []).map((r: {
-          isim_maskeli: string; tutar: number; ortalama_puan: number | null; yorum_sayisi: number;
+          isim_maskeli: string; tutar: number | null; ortalama_puan: number | null; yorum_sayisi: number;
+          teklif_turu?: "nakit" | "dosya"; teklif_dosyasi_url?: string | null; alternatif_proje_url?: string | null;
+          kazandi_mi?: boolean;
         }) => ({
           tutar: r.tutar,
           kullanici_adi: r.isim_maskeli,
           ortalamaPuan: r.ortalama_puan,
           yorumSayisi: r.yorum_sayisi,
+          kazandiMi: r.kazandi_mi,
+          teklifTuru: r.teklif_turu,
+          teklifDosyasiPath: r.teklif_dosyasi_url,
+          alternatifProjePath: r.alternatif_proje_url,
         }));
         const kazananFiyat = kazananFiyatData?.[0]?.tutar ?? null;
         if (!iptal) {
-          setSonuc({ durum: "maskeli", firmalar, kazananFiyat, kazananVarMi: kazananFiyat !== null });
+          setSonuc({ durum: "maskeli", firmalar, kazananFiyat, kazananVarMi: !!kazananVarMiData });
         }
         return;
       }

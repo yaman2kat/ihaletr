@@ -227,9 +227,11 @@ const GRAFIK_RENK_DUSUK = "#0ca30c";
 const GRAFIK_RENK_YUKSEK = "#d03b3b";
 
 function TeklifGrafigi({ firmalar }: { firmalar: SonucFirma[] }) {
-  if (firmalar.length < 2) return null;
+  // Dosya tabanlı (tutarsız) teklifler grafikte gösterilemez.
+  const nakitFirmalar = firmalar.filter((f): f is SonucFirma & { tutar: number } => f.tutar !== null);
+  if (nakitFirmalar.length < 2) return null;
 
-  const veri = [...firmalar].sort((a, b) => a.tutar - b.tutar);
+  const veri = [...nakitFirmalar].sort((a, b) => a.tutar - b.tutar);
   const enDusukTutar = veri[0].tutar;
   const enYuksekTutar = veri[veri.length - 1].tutar;
   const cokesitliTutar = enDusukTutar !== enYuksekTutar;
@@ -301,6 +303,44 @@ function TeklifGrafigi({ firmalar }: { firmalar: SonucFirma[] }) {
   );
 }
 
+const TEKLIF_DOSYALARI_BUCKET = "ihale-teklif-dosyalari";
+
+// Teklif dosyasi / alternatif proje icin, ozel (private) bucket'tan
+// tikleme aninda sureli imzali link uretir -- erisim, Storage RLS
+// politikasiyla (ihale_teklif_listesi_maskeli ile ayni yetki kurali)
+// zaten sunucu tarafinda garanti altindadir; bu buton sadece UI'dir.
+function DosyaButonu({ path, etiket }: { path: string; etiket: string }) {
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [hata, setHata] = useState(false);
+
+  async function ac() {
+    setYukleniyor(true);
+    setHata(false);
+    const supabase = createClient();
+    const { data, error } = await supabase.storage.from(TEKLIF_DOSYALARI_BUCKET).createSignedUrl(path, 300);
+    setYukleniyor(false);
+    if (error || !data?.signedUrl) { setHata(true); return; }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={ac}
+      disabled={yukleniyor}
+      className={`text-xs font-semibold whitespace-nowrap hover:underline disabled:opacity-50 flex items-center gap-1 ${
+        hata ? "text-red-600" : "text-blue-700"
+      }`}
+    >
+      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      {yukleniyor ? "…" : hata ? "Açılamadı, tekrar dene" : etiket}
+    </button>
+  );
+}
+
 // Ihale sahibinin bitmis ihalede bir firmayi kazanan olarak secip
 // ihaleyi resmen kapatmasi. Bu tek islem: teklifin durumunu
 // kabul_edildi/reddedildi yapar (yorum yazma yetkisini acar), kazanan
@@ -308,7 +348,7 @@ function TeklifGrafigi({ firmalar }: { firmalar: SonucFirma[] }) {
 // bildirim gonderir (bkz. ihale_kapatildi_bildir trigger'i).
 function SecVeKapatButonu({
   ihaleId, kullaniciId, firmaAdi, tutar, onKapatildi,
-}: { ihaleId: string; kullaniciId: string; firmaAdi: string; tutar: number; onKapatildi: (kullaniciId: string, tutar: number) => void }) {
+}: { ihaleId: string; kullaniciId: string; firmaAdi: string; tutar: number | null; onKapatildi: (kullaniciId: string, tutar: number | null) => void }) {
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState("");
 
@@ -374,7 +414,7 @@ function KilitliButon() {
 
 export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Props) {
   const [acikMi, setAcikMi] = useState(false);
-  const [kapatildiOverride, setKapatildiOverride] = useState<{ kullaniciId: string; tutar: number } | null>(null);
+  const [kapatildiOverride, setKapatildiOverride] = useState<{ kullaniciId: string; tutar: number | null } | null>(null);
   const gercekMi = gercekIhaleIdMi(ihale.id);
 
   // Mock/demo ihaleler icin eski (basit) kural; gercek ihaleler icin
@@ -400,6 +440,10 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
       yorumSayisi: f.yorumSayisi,
       kullaniciId: f.kullanici_id,
       teklifDurumu: f.durum,
+      kazandiMi: f.kazandiMi,
+      teklifTuru: f.teklifTuru,
+      teklifDosyasiPath: f.teklifDosyasiPath,
+      alternatifProjePath: f.alternatifProjePath,
     }));
 
     if (firmalar.length === 0) {
@@ -414,10 +458,13 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
       ?? firmalar.find((f) => f.teklifDurumu === "kabul_edildi")?.kullaniciId
       ?? null;
     const kazananFiyat = kapatildiOverride?.tutar ?? gercekErisim.kazananFiyat;
-    // Maskeli tier'da kazanan satiri, tutar eslesmesiyle bulunur (kullanici_id hic donmez).
+    const kazananVarMi = kapatildiOverride !== null || kazananKullaniciId !== null || gercekErisim.kazananVarMi;
+    // Maskeli tier'da kazanan satiri kimlik icermez; sunucu tarafinda
+    // hesaplanmis kazandiMi bayragiyla bulunur (tutar eslesmesi dosya
+    // turu tekliflerde ve ayni tutarli tekliflerde calismazdi).
     const kazananAdi = tamMi
       ? firmalar.find((f) => f.kullaniciId === kazananKullaniciId)?.firmaAdi
-      : (kazananFiyat !== null ? firmalar.find((f) => f.tutar === kazananFiyat)?.firmaAdi : undefined);
+      : firmalar.find((f) => f.kazandiMi)?.firmaAdi;
 
     const veri: IhaleSonucVerisi = {
       ihaleId: ihale.id,
@@ -429,7 +476,7 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
     };
 
     const ozet = ozetIstatistikHesapla(firmalar);
-    const siraliFirmalar = [...firmalar].sort((a, b) => a.tutar - b.tutar);
+    const siraliFirmalar = [...firmalar].sort((a, b) => (a.tutar ?? Infinity) - (b.tutar ?? Infinity));
     const uzatmaGosterilsinMi = tamMi && !kazananKullaniciId && firmalar.length < 7;
 
     return (
@@ -482,11 +529,11 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
                   </p>
                 )}
 
-                {kazananFiyat !== null && (
+                {kazananVarMi && (
                   <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2">
                     <span className="text-lg">🏆</span>
                     <p className="text-sm font-semibold text-green-800">
-                      İhale <strong>{formatPara(kazananFiyat)}</strong> teklifle tamamlandı
+                      İhale{kazananFiyat !== null && <> <strong>{formatPara(kazananFiyat)}</strong> teklifle</>} tamamlandı
                       {kazananAdi && <>, <strong>{kazananAdi}</strong> firmasına verildi</>}.
                     </p>
                   </div>
@@ -500,6 +547,7 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
                         <th className="py-2 pr-3 font-medium">Firma</th>
                         <th className="py-2 pr-3 font-medium">Teklif Tutarı</th>
                         <th className="py-2 pr-3 font-medium">Ortalama Puan</th>
+                        <th className="py-2 pr-3 font-medium">Dosyalar</th>
                         {tamMi && <th className="py-2 pr-3 font-medium"></th>}
                         {tamMi && <th className="py-2 font-medium"></th>}
                       </tr>
@@ -508,11 +556,22 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
                       {siraliFirmalar.map((f, i) => (
                         <tr key={i}>
                           <td className="py-3 pr-3 font-medium text-gray-900">{f.firmaAdi}</td>
-                          <td className="py-3 pr-3 text-gray-700 whitespace-nowrap">{formatPara(f.tutar)}</td>
+                          <td className="py-3 pr-3 text-gray-700 whitespace-nowrap">
+                            {f.tutar !== null
+                              ? formatPara(f.tutar)
+                              : <span className="text-gray-400 italic">Dosya ile teklif</span>}
+                          </td>
                           <td className="py-3 pr-3 text-gray-700 whitespace-nowrap">
                             {f.ortalamaPuan !== null
                               ? `${f.ortalamaPuan.toFixed(1)} ★ (${f.yorumSayisi})`
                               : <span className="text-gray-400">Henüz değerlendirme yok</span>}
+                          </td>
+                          <td className="py-3 pr-3">
+                            <div className="flex flex-col items-start gap-1">
+                              {f.teklifDosyasiPath && <DosyaButonu path={f.teklifDosyasiPath} etiket="Teklif Dosyası" />}
+                              {f.alternatifProjePath && <DosyaButonu path={f.alternatifProjePath} etiket="Alternatif Proje" />}
+                              {!f.teklifDosyasiPath && !f.alternatifProjePath && <span className="text-xs text-gray-300">—</span>}
+                            </div>
                           </td>
                           {tamMi && (
                             <td className="py-3 pr-3">
@@ -620,7 +679,7 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
   };
 
   const ozet = ozetIstatistikHesapla(firmalar);
-  const siraliFirmalar = [...firmalar].sort((a, b) => a.tutar - b.tutar);
+  const siraliFirmalar = [...firmalar].sort((a, b) => (a.tutar ?? Infinity) - (b.tutar ?? Infinity));
   const uzatmaGosterilsinMi = firmalar.length < 7;
 
   if (mockErisim === "yukleniyor") {
@@ -691,7 +750,7 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
                     {siraliFirmalar.map((f, i) => (
                       <tr key={i}>
                         <td className="py-3 pr-3 font-medium text-gray-900">{f.firmaAdi}</td>
-                        <td className="py-3 pr-3 text-gray-700 whitespace-nowrap">{formatPara(f.tutar)}</td>
+                        <td className="py-3 pr-3 text-gray-700 whitespace-nowrap">{formatPara(f.tutar ?? 0)}</td>
                         <td className="py-3 pr-3 text-gray-700 whitespace-nowrap">
                           {f.ortalamaPuan !== null
                             ? `${f.ortalamaPuan.toFixed(1)} ★ (${f.yorumSayisi})`
