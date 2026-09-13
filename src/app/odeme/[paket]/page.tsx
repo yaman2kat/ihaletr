@@ -19,7 +19,7 @@ const PAKET_BILGI: Record<string, {
   // rozeti için normal fiyat + indirimli (charged) fiyatın gösterimi.
   kuruluşaOzel?: { normal: string };
 }> = {
-  premium:      { isim: "Premium Üyelik",   fiyat: "499.00",  fiyatGoster: "499₺/ay",   aciklama: "Sınırsız ihale, 45 güne kadar ihale süresi + ekstra 15 güne kadar uzatma", renk: "blue",   geriHref: "/premium"       },
+  premium:      { isim: "Premium Üyelik",   fiyat: "499.00",  fiyatGoster: "499₺",      aciklama: "Tek seferlik satın alma. Sınırsız ihale, 45 güne kadar ihale süresi + 45 günlük dağıtılabilir uzatma havuzu", renk: "blue",   geriHref: "/premium"       },
   kurumsal:     { isim: "Kurumsal Üyelik",  fiyat: "2499.00", fiyatGoster: "2.499₺/ay", aciklama: "Premium'ın tüm özellikleri + çoklu kullanıcı",                             renk: "purple", geriHref: "/premium"       },
   "teklif-temel":    { isim: "Temel Paket",     fiyat: "699.00",  fiyatGoster: "699₺",      aciklama: "1 teklif hakkı, tek seferlik",       renk: "gray", geriHref: "/teklif-paketi", kuruluşaOzel: { normal: "999₺" } },
   "teklif-kurumsal": { isim: "Kurumsal Paket",  fiyat: "2299.00", fiyatGoster: "2.299₺/ay", aciklama: "Sınırsız teklif hakkı, aylık yenileme", renk: "teal", geriHref: "/teklif-paketi", kuruluşaOzel: { normal: "3.299₺" } },

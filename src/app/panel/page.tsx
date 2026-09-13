@@ -6,9 +6,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import type { HesapTuru } from "@/lib/types";
-import DavetKart from "./DavetKart";
 import ArsaSahibiPanel from "./ArsaSahibiPanel";
 import MuteahhitPanel from "./MuteahhitPanel";
+import MuteahhitDavetKart from "./MuteahhitDavetKart";
 
 // ─── Ödeme başarı bildirimi (useSearchParams Suspense gerektirir) ─────────────
 
@@ -83,7 +83,6 @@ export default function PanelSayfasi() {
   const [hesapTuru,  setHesapTuru]  = useState<HesapTuru>("arsa_sahibi");
   const [yukleniyor, setYukleniyor] = useState(true);
   const [herIkisiSekme, setHerIkisiSekme] = useState<HerIkisiSekme>("arsa_sahibi");
-  const [yenilemeSayaci, setYenilemeSayaci] = useState(0);
 
   const supabase = createClient();
 
@@ -150,9 +149,6 @@ export default function PanelSayfasi() {
         <OdemeBildirimi />
       </Suspense>
 
-      {/* ─── Arkadaşını Davet Et ─── */}
-      <DavetKart userId={kullanici!.id} onOduluUygulandi={() => setYenilemeSayaci((n) => n + 1)} />
-
       {/* ─── Her İkisi: panel geçiş sekmeleri ─── */}
       {hesapTuru === "her_ikisi" && (
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
@@ -168,9 +164,12 @@ export default function PanelSayfasi() {
       )}
 
       {gorunenPanel === "arsa_sahibi" ? (
-        <ArsaSahibiPanel key={`arsa-${yenilemeSayaci}`} userId={kullanici!.id} />
+        <ArsaSahibiPanel userId={kullanici!.id} />
       ) : (
-        <MuteahhitPanel key={`muteahhit-${yenilemeSayaci}`} userId={kullanici!.id} />
+        <>
+          <MuteahhitDavetKart userId={kullanici!.id} />
+          <MuteahhitPanel userId={kullanici!.id} />
+        </>
       )}
     </div>
   );

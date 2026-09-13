@@ -49,6 +49,7 @@ const PAKETLER: Paket[] = [
       "Teklif analitikleri",
       "Öncelikli bildirimler",
       "Öncelikli müşteri desteği",
+      "Tamamlanmış tüm ihalelerin sonuç raporlarını görüntüleme (firma isimleri maskelenmiş, teklif tutarları ve dosyalar görünür)",
     ],
     popüler: true,
     ctaHref: "/odeme/teklif-kurumsal",
@@ -98,8 +99,7 @@ export default function TeklifPaketiSayfasi() {
         </span>
         <h1 className="text-4xl font-bold text-gray-900 mb-4">Teklif Hakkınızı Genişletin</h1>
         <p className="text-gray-500 text-lg max-w-xl mx-auto leading-relaxed">
-          İlk teklifiniz ücretsizdir.
-          Daha fazlası için aşağıdaki paketlerden birini seçin.
+          Teklif vermek için aşağıdaki paketlerden birini seçin.
         </p>
 
         {/* Mevcut hak göstergesi — yalnızca kalan hak 0 ise gösterilir */}
@@ -195,6 +195,16 @@ export default function TeklifPaketiSayfasi() {
         })}
       </div>
 
+      {/* Davet sistemi açıklaması */}
+      <div className="max-w-3xl mx-auto mb-16 bg-blue-50 border border-blue-200 rounded-2xl px-6 py-5">
+        <p className="text-sm text-blue-800 leading-relaxed">
+          <strong>Davet ederek de teklif hakkı kazanabilirsiniz:</strong> davet ettiğiniz kişi, davet kodunuzu
+          kullanarak bir ihaleye teklif verdiğinde veya bir ihale açtığında hesabınıza 1 teklif hakkı tanımlanır.
+          Sadece kayıt olması yeterli değildir. Bu yolla ayda en fazla 1 teklif hakkı kazanabilirsiniz. Davet
+          kodunuzu panelinizden paylaşabilirsiniz.
+        </p>
+      </div>
+
       {/* Karşılaştırma */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-16">
         <div className="px-6 py-5 border-b border-gray-100">
@@ -212,11 +222,12 @@ export default function TeklifPaketiSayfasi() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {[
-                ["Teklif hakkı",          "1",        "1",       "Sınırsız"],
-                ["Geçerlilik",            "Tek sef.", "Süresiz", "Aylık yenileme"],
+                ["Teklif hakkı",          "0",        "1",       "Sınırsız"],
+                ["Geçerlilik",            "—",        "Süresiz", "Aylık yenileme"],
                 ["Teklif takip paneli",   "✓",        "✓",       "✓"],
                 ["Öncelikli bildirimler", "—",        "—",       "✓"],
                 ["Teklif analitikleri",   "—",        "—",       "✓"],
+                ["Tamamlanmış ihale sonuç raporları (maskeli)", "—", "—", "✓"],
                 ["Destek kanalı",         "E-posta",  "E-posta", "Öncelikli"],
               ].map(([ozellik, ucretsiz, temel, kurumsal]) => (
                 <tr key={ozellik} className="hover:bg-gray-50 transition-colors">
@@ -237,8 +248,8 @@ export default function TeklifPaketiSayfasi() {
         <div className="flex flex-col gap-4">
           {[
             {
-              s: "İlk teklifim neden ücretsiz?",
-              c: "Hesap oluştururken, ilk teklifiniz ücretsiz olacak şekilde otomatik olarak 1 teklif hakkı tanınır. Bu hak herhangi bir ihaleye teklif verdiğinizde otomatik düşer.",
+              s: "Teklif hakkımı nasıl kazanabilirim?",
+              c: "Hesap oluştururken ücretsiz teklif hakkı verilmez. Teklif hakkı kazanmak için Temel ya da Kurumsal Paket satın alabilirsiniz.",
             },
             {
               s: "Temel Paket'teki hak ne zaman sona erer?",

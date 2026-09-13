@@ -36,15 +36,11 @@ const KATEGORILER: Kategori[] = [
     sorular: [
       {
         s: "Üyelik planları arasındaki farklar nelerdir?",
-        c: "Ücretsiz plan, tek kullanımlık 1 ihale hakkı ve en fazla 5 gün ihale süresiyle sınırlıdır, süre uzatma içermez. Premium plan sınırsız aktif ihale, 45 güne kadar ihale süresi, ekstra 15 güne kadar uzatma (toplamda 60 güne kadar) ve teklifçi analitikleri sunar. Kurumsal plan 60 güne kadar ihale süresi, ekstra 30 güne kadar uzatma (toplamda 90 güne kadar), 10 kullanıcılı hesap, özel API erişimi ve SLA garantisi ile en kapsamlı pakettir. Detaylar için Premium sayfasındaki karşılaştırma tablosuna bakabilirsiniz.",
+        c: "Ücretsiz plan tek kullanımlık 1 ihale hakkı ve en fazla 5 gün ihale süresiyle sınırlıdır, süre uzatma içermez. Premium, tek seferlik bir satın almadır: sınırsız ihale, 45 güne kadar ihale süresi ve 45 günlük, farklı ihalelerinize dağıtabileceğiniz bir uzatma havuzu sunar. Kurumsal plan aylık abonelik olarak çalışır; sınırsız ihale, 60 güne kadar ihale süresi, ekstra 30 güne kadar uzatma (toplamda 90 güne kadar), 10 kullanıcılı hesap, özel API erişimi ve SLA garantisi ile en kapsamlı pakettir. Detaylar için Premium sayfasındaki karşılaştırma tablosuna bakabilirsiniz.",
       },
       {
         s: "Teklif verme ücretlendirmesi nasıl işliyor?",
-        c: "Teklif vermek \"teklif hakkı\" tüketir. Her hesaba tanınan ücretsiz haklar bittiğinde, Teklif Paketi sayfasından Temel Paket (1 hak, tek seferlik) veya sınırsız aylık Kurumsal Paket'ten birini satın alarak teklif vermeye devam edebilirsiniz.",
-      },
-      {
-        s: "İlk teklifim neden ücretsiz?",
-        c: "Yeni açılan her hesaba, ilk teklifiniz ücretsiz olacak şekilde otomatik olarak 1 teklif hakkı tanımlanır; böylece bir paket satın almadan önce platformu ve teklif verme sürecini deneyebilirsiniz. Bu hak herhangi bir ihaleye teklif verdiğinizde otomatik olarak düşer.",
+        c: "Teklif vermek \"teklif hakkı\" tüketir. Yeni açılan hesaplara ücretsiz teklif hakkı tanımlanmaz — Teklif Paketi sayfasından Temel Paket (1 hak, tek seferlik) veya sınırsız aylık Kurumsal Paket'ten birini satın alarak, ya da bir müteahhitin davet kodunu kullanıp ona hak kazandırarak teklif vermeye başlayabilirsiniz.",
       },
       {
         s: "Teklif hakkım biterse ne olur?",
@@ -52,7 +48,7 @@ const KATEGORILER: Kategori[] = [
       },
       {
         s: "İade politikanız nedir?",
-        c: "Premium ve Kurumsal abonelik planları 14 gün iade güvencesiyle sunulur. Tek seferlik Temel Paket kullanılmaya başlanmadıysa iptal talepleri destek ekibimiz tarafından değerlendirilir; talepleriniz için İletişim sayfasından bize ulaşabilirsiniz.",
+        c: "Kurumsal abonelik planı 14 gün iade güvencesiyle sunulur. Tek seferlik Premium ve Temel Paket kullanılmaya başlanmadıysa iptal talepleri destek ekibimiz tarafından değerlendirilir; talepleriniz için İletişim sayfasından bize ulaşabilirsiniz.",
       },
     ],
   },
@@ -65,7 +61,7 @@ const KATEGORILER: Kategori[] = [
       },
       {
         s: "İhale süresini nasıl uzatabilirim?",
-        c: "Süresi dolmuş bir ihalenin detay sayfasındaki \"İhale Sonucunu Göster\" raporu içinden \"İhaleyi Uzat\" bölümünü kullanabilirsiniz. Ücretsiz planda uzatma yapılamaz; Premium planda ekstra 15 güne kadar (toplamda en fazla 60 gün), Kurumsal planda ekstra 30 güne kadar (toplamda en fazla 90 gün) uzatabilirsiniz.",
+        c: "Ücretsiz planda uzatma yapılamaz. Premium'da, satın alma anında kazandığınız 45 günlük uzatma havuzundan, aktif bir ihalenizin detay sayfasındaki \"Süre Ekle\" bölümünü kullanarak gün ekleyebilirsiniz — havuzunuzu farklı ihaleleriniz arasında dilediğiniz gibi paylaştırabilirsiniz. Kurumsal planda ise süresi dolmuş bir ihalenin \"İhale Sonucunu Göster\" raporundaki \"İhaleyi Uzat\" bölümünden ekstra 30 güne kadar (toplamda en fazla 90 gün) uzatabilirsiniz.",
       },
       {
         s: "En düşük/en yüksek teklifi kimler görebilir?",

@@ -33,7 +33,6 @@ function KayitForm() {
     telefon:     "",
     lisansNo:    "",
     yetkiBelgesiGrubu: "" as "" | YetkiBelgesiGrubu,
-    davetKodu:   searchParams.get("ref") || "",
     sifre:       "",
     sifreTekrar: "",
   });
@@ -53,7 +52,6 @@ function KayitForm() {
     const supabase = createClient();
     const params = new URLSearchParams({ next });
     if (hesapTuru) params.set("hesap_turu", hesapTuru);
-    if (form.davetKodu.trim()) params.set("ref", form.davetKodu.trim().toUpperCase());
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -100,7 +98,6 @@ function KayitForm() {
           firma_adi: form.firmaAdi || null,
           telefon:   form.telefon  || null,
           hesap_turu: hesapTuru,
-          davet_referans_kodu: form.davetKodu.trim() ? form.davetKodu.trim().toUpperCase() : null,
         },
       },
     });
@@ -428,18 +425,6 @@ function KayitForm() {
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5" htmlFor="davetKodu">
-                Davet Kodu <span className="text-gray-400 font-normal">(opsiyonel)</span>
-              </label>
-              <input id="davetKodu" type="text"
-                placeholder="ABC123"
-                value={form.davetKodu}
-                onChange={(e) => setForm((f) => ({ ...f, davetKodu: e.target.value.toUpperCase() }))}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm uppercase"
               />
             </div>
 

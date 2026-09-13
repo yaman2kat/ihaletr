@@ -11,7 +11,7 @@ const PAKET: Record<string, {
   plan?: string;
   teklif_hak?: number;
 }> = {
-  premium:           { fiyat: "499.00",  aciklama: "Premium Üyelik (1 ay)",     tip: "plan",   plan: "premium"  },
+  premium:           { fiyat: "499.00",  aciklama: "Premium Üyelik (tek seferlik)", tip: "plan",   plan: "premium"  },
   kurumsal:          { fiyat: "2499.00", aciklama: "Kurumsal Üyelik (1 ay)",    tip: "plan",   plan: "kurumsal" },
   "teklif-temel":    { fiyat: "699.00",  aciklama: "Temel Paket (1 teklif hakkı)",        tip: "teklif", teklif_hak: 1     },
   "teklif-kurumsal": { fiyat: "2299.00", aciklama: "Kurumsal Paket (sınırsız, 1 ay)",     tip: "teklif", teklif_hak: 99999 },
@@ -35,11 +35,23 @@ async function krediUygula(
   kullaniciId: string,
   paketBilgi: (typeof PAKET)[string]
 ): Promise<{ basarili: boolean; hata?: string }> {
-  if (paketBilgi.tip === "plan" && paketBilgi.plan) {
+  if (paketBilgi.tip === "plan" && paketBilgi.plan === "premium") {
+    // Premium tek seferlik satın alımdır — süresiz (premium_bitis_tarihi
+    // set edilmez) ve satın alma anında 45 günlük uzatma havuzu eklenir.
+    const { error: planError } = await db.from("kullanicilar").update({
+      plan_turu: "premium",
+    }).eq("id", kullaniciId);
+    if (planError) return { basarili: false, hata: planError.message };
+
+    const { error: havuzError } = await db.rpc("premium_havuz_ekle", { p_kullanici_id: kullaniciId });
+    return { basarili: !havuzError, hata: havuzError?.message };
+  }
+
+  if (paketBilgi.tip === "plan" && paketBilgi.plan === "kurumsal") {
     const bitisTarihi = new Date();
     bitisTarihi.setDate(bitisTarihi.getDate() + 30);
     const { error } = await db.from("kullanicilar").update({
-      plan_turu:            paketBilgi.plan,
+      plan_turu:            "kurumsal",
       premium_bitis_tarihi: bitisTarihi.toISOString(),
     }).eq("id", kullaniciId);
     return { basarili: !error, hata: error?.message };
@@ -47,8 +59,16 @@ async function krediUygula(
 
   if (paketBilgi.tip === "teklif" && paketBilgi.teklif_hak !== undefined) {
     if (paketBilgi.teklif_hak >= 99999) {
+      // Müteahhit Kurumsal Paket (sınırsız teklif hakkı, aylık): sınırsız
+      // teklif hakkının yanı sıra plan_turu da 'kurumsal' yapılır — bu
+      // olmadan tamamlanmış ihalelerin maskeli sonuç raporuna erişim
+      // (ihale_teklif_listesi_maskeli RPC'si ve teklif dosyası storage
+      // politikası, ikisi de plan_turu='kurumsal' kontrol eder) hiç
+      // çalışmazdı.
+      const bitisTarihi = new Date();
+      bitisTarihi.setDate(bitisTarihi.getDate() + 30);
       const { error } = await db.from("kullanicilar")
-        .update({ kalan_teklif_hakki: 99999 })
+        .update({ kalan_teklif_hakki: 99999, plan_turu: "kurumsal", premium_bitis_tarihi: bitisTarihi.toISOString() })
         .eq("id", kullaniciId);
       return { basarili: !error, hata: error?.message };
     }
