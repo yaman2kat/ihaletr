@@ -35,11 +35,23 @@ function ihaleBitmis(ihale: Ihale): boolean {
   return ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun(ihale.bitis_tarihi) <= 0);
 }
 
+// "Karar Bekleniyor" rozeti KASITLI OLARAK yalnizca burada (ihale
+// sahibinin kendi paneli) gosterilir -- genel /ihaleler listesinde
+// (bkz. IhaleKarti.tsx) bu rozet hic gorunmez, onun yerine notr bir
+// "Süresi Doldu" etiketi kullanilir.
+function rozetHesapla(ihale: Ihale): { etiket: string; cls: string } {
+  if (ihaleBitmis(ihale) && !ihale.secilen_firma_id) {
+    return { etiket: "Karar Bekleniyor", cls: "bg-amber-100 text-amber-700" };
+  }
+  return DURUM_BADGE[ihale.durum];
+}
+
 export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
   const [ihaleler,       setIhaleler]       = useState<Ihale[]>([]);
   const [gelenTeklifler, setGelenTeklifler] = useState<GelenTeklif[]>([]);
   const [teklifSayilari, setTeklifSayilari] = useState<Record<string, number>>({});
   const [planTuru,       setPlanTuru]       = useState<PlanTuru>("ucretsiz");
+  const [uzatmaHavuzu,   setUzatmaHavuzu]   = useState(0);
   const [yukleniyor,     setYukleniyor]     = useState(true);
   const [sekme,          setSekme]          = useState<Sekme>("ihaleler");
   const [siliniyor,      setSiliniyor]      = useState<string | null>(null);
@@ -49,10 +61,11 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
   useEffect(() => {
     async function yukle() {
       const { data: profilData } = await supabase.from("kullanicilar")
-        .select("plan_turu")
+        .select("plan_turu, uzatma_havuzu_gun")
         .eq("id", userId)
         .single();
       setPlanTuru((profilData?.plan_turu as PlanTuru) ?? "ucretsiz");
+      setUzatmaHavuzu(profilData?.uzatma_havuzu_gun ?? 0);
 
       const { data: ihaleData } = await supabase.from("ihaleler").select("*")
         .eq("olusturan_id", userId)
@@ -161,6 +174,11 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
           <p className="text-sm text-gray-500">
             İhalelerinizde en fazla <span className="font-semibold text-gray-900">{PLAN_ILK_IHALE_GUNU[planTuru]} gün</span> süre tanımlayabilirsiniz
           </p>
+          {planTuru === "premium" && (
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
+              Kalan Uzatma Hakkım: {uzatmaHavuzu} gün
+            </span>
+          )}
         </div>
         {planTuru !== "kurumsal" && (
           <Link href="/premium" className="text-xs font-bold text-blue-700 hover:underline whitespace-nowrap">
@@ -241,7 +259,7 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
           ) : (
             <div className="flex flex-col gap-3">
               {ihaleler.map((ihale) => {
-                const badge = DURUM_BADGE[ihale.durum];
+                const badge = rozetHesapla(ihale);
                 const kalan = kalanGun(ihale.bitis_tarihi);
                 const yaklasiyor = ihale.durum === "aktif" && kalan < 5;
                 return (
@@ -339,7 +357,7 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                         </div>
                         {yaklasiyor && (
                           <Link
-                            href="/premium"
+                            href={planTuru === "premium" ? `/ihaleler/${ihale.id}` : "/premium"}
                             className="text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap"
                           >
                             Süreyi Uzat →

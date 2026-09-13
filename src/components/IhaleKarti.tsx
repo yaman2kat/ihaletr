@@ -3,13 +3,14 @@ import { Ihale } from "@/lib/types";
 import { mockIhaleTeklifleri } from "@/lib/mock-data";
 import IhaleSonucRaporu from "@/components/IhaleSonucRaporu";
 
-// Durum rozeti mantığı:
+// Durum rozeti mantığı (GENEL/herkese açık listeler -- ihale sahibinin
+// kendi paneli DEĞİL):
 // - Beklemede/İptal: sabit rozet.
 // - Süresi henüz dolmamış aktif ihale: geri sayım (3 günden az turuncu, aksi yeşil).
 // - Süresi dolmuş (aktif+gecmis ya da durum=tamamlandi) AMA kazanan
-//   secilmemis: "Karar Bekleniyor" (turuncu) -- otomatik sonlandirma
-//   kazanan atamadan da durumu tamamlandi yapabildigi icin bu ayrim
-//   sadece durum alanina degil secilen_firma_id'ye bakar.
+//   secilmemis: notr "Süresi Doldu" rozeti -- "Karar Bekleniyor" burada
+//   KASITLI OLARAK gosterilmez (yalnizca ihale sahibinin panelinde
+//   gorunur, bkz. ArsaSahibiPanel.tsx).
 // - Süresi dolmus VE kazanan secilmis: "Tamamlandı" (gri).
 function rozetHesapla(ihale: Ihale, kalanGun: number): { etiket: string; cls: string } {
   if (ihale.durum === "beklemede") return { etiket: "Beklemede", cls: "bg-yellow-100 text-yellow-800" };
@@ -21,7 +22,7 @@ function rozetHesapla(ihale: Ihale, kalanGun: number): { etiket: string; cls: st
     return { etiket: `${kalanGun} gün kaldı`, cls: "bg-green-100 text-green-800" };
   }
   if (ihale.secilen_firma_id) return { etiket: "Tamamlandı", cls: "bg-gray-100 text-gray-700" };
-  return { etiket: "Karar Bekleniyor", cls: "bg-amber-100 text-amber-700" };
+  return { etiket: "Süresi Doldu", cls: "bg-gray-100 text-gray-500" };
 }
 
 function formatPara(tutar: number): string {

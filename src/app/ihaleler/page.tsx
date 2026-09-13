@@ -245,9 +245,14 @@ function IhalelerIcerik() {
 
     // Kullanici ozellikle "sadece suresi dolanlar" filtrelemediyse, suresi
     // dolmus/tamamlanmis/iptal ihaleler secilen siralamadan bagimsiz olarak
-    // her zaman en altta gosterilir.
+    // her zaman en altta gosterilir -- kendi aralarinda ise (secilen
+    // siralamadan bagimsiz) en yeni kapanmis once gelecek sekilde.
     if (!(sureDolmus && !sureAktif)) {
-      sonuc = [...sonuc.filter((i) => !ihaleBitmisMi(i)), ...sonuc.filter(ihaleBitmisMi)];
+      const aktifler = sonuc.filter((i) => !ihaleBitmisMi(i));
+      const bitmisler = sonuc
+        .filter(ihaleBitmisMi)
+        .sort((a, b) => new Date(b.bitis_tarihi).getTime() - new Date(a.bitis_tarihi).getTime());
+      sonuc = [...aktifler, ...bitmisler];
     }
 
     return sonuc;
