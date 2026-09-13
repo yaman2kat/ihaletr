@@ -41,6 +41,16 @@ function dosyaOku(dosya: File): Promise<string> {
   });
 }
 
+// Tapu mükerrerlik kontrolü: aynı tapu belgesinin farklı ihalelerde
+// kullanılıp kullanılmadığını admin panelinde tespit etmek için,
+// dosyanın SHA-256 hash'i tarayıcıda hesaplanıp belgeler.dosya_hash'e
+// yazılır (bkz. admin/ihaleler/[id]/page.tsx).
+async function sha256Hex(dosya: File): Promise<string> {
+  const veri = await dosya.arrayBuffer();
+  const ozet = await crypto.subtle.digest("SHA-256", veri);
+  return Array.from(new Uint8Array(ozet)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function dosyaGeriYukle(taslak: DosyaTaslak): File {
   const base64 = taslak.veriUrl.split(",")[1] ?? "";
   const ikili = atob(base64);
@@ -76,6 +86,7 @@ export default function IhaleOlustur() {
     proje: "" as "" | "var" | "yok",
     mulkiyetDurumu: "" as "" | MulkiyetDurumu,
     sirketUnvani: "", yetkiliKisiAdi: "",
+    davetKodu: "",
   });
   const [basvuruSahibiAdi, setBasvuruSahibiAdi] = useState("");
   const [eksikAlanlar, setEksikAlanlar] = useState<string[]>([]);
@@ -267,6 +278,19 @@ export default function IhaleOlustur() {
       if (hakError) console.error("Ücretsiz ihale hakkı işaretlenemedi:", hakError.message);
     }
 
+    // Davetiye kodu girildiyse: davet edene, gerçekten bir ihale açıldığı
+    // için (yalnızca kayıt değil) +1 teklif hakkı tanımlanır — aylık limit
+    // aşılmışsa RPC sessizce no-op olur/bildirim gönderir. İhale oluşturma
+    // akışını bloklamaz.
+    if (form.davetKodu.trim()) {
+      supabase.rpc("davet_kodu_aktivasyonu", {
+        p_davet_kodu: form.davetKodu.trim(),
+        p_aktivasyon_turu: "ihale",
+      }).then(({ error }) => {
+        if (error) console.warn("Davet kodu aktivasyonu başarısız:", error.message);
+      });
+    }
+
     // 2. Dosyaları Storage'a yükle ve belgeler tablosuna kaydet
     const dosyaYukle = async (
       dosya: File | null,
@@ -309,9 +333,10 @@ export default function IhaleOlustur() {
     ): Promise<{ baslik: string; basarili: boolean } | null> => {
       if (!dosya) return null;
       const yol = `${ihaleData.id}/${dosyaAdiOnEki}-${Date.now()}-${dosya.name}`;
-      const { data: storageData, error: storageError } = await supabase.storage
-        .from("ihale-tapu-belgeleri")
-        .upload(yol, dosya, { upsert: false });
+      const [{ data: storageData, error: storageError }, dosyaHash] = await Promise.all([
+        supabase.storage.from("ihale-tapu-belgeleri").upload(yol, dosya, { upsert: false }),
+        tur === "tapu" ? sha256Hex(dosya).catch(() => null) : Promise.resolve(null),
+      ]);
 
       if (storageError || !storageData) return { baslik, basarili: false };
 
@@ -320,6 +345,7 @@ export default function IhaleOlustur() {
         dosya_url:   yol, // özel bucket içindeki yol — herkese açık URL değil
         dosya_tipi:  dosya.type,
         boyut:       dosya.size,
+        dosya_hash:  dosyaHash,
         tur,
         ihale_id:    ihaleData.id,
         yukleyen_id: kullaniciId,
@@ -820,6 +846,20 @@ export default function IhaleOlustur() {
               </span>
             </label>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Davetiye Kodu <span className="text-gray-400 font-normal">(varsa)</span>
+            </label>
+            <input
+              type="text" placeholder="ABC123"
+              value={form.davetKodu} onChange={(e) => guncelle("davetKodu", e.target.value.toUpperCase())}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+            />
+            <p className="text-xs text-gray-400 mt-1.5">
+              Bir müteahhitin davet kodunu kullanıyorsanız buraya girin — ihaleniz yayınlandığında davet eden kişiye 1 teklif hakkı tanımlanır.
+            </p>
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <button

@@ -16,7 +16,8 @@ DROP TRIGGER IF EXISTS on_auth_user_email_confirmed ON auth.users;
 DROP TABLE IF EXISTS public.bildirim_tercihleri         CASCADE;
 DROP TABLE IF EXISTS public.bildirimler                 CASCADE;
 DROP TABLE IF EXISTS public.odeme_kayitlari              CASCADE;
-DROP TABLE IF EXISTS public.davetler                    CASCADE;
+DROP TABLE IF EXISTS public.teklif_bildirimleri         CASCADE;
+DROP TABLE IF EXISTS public.davet_kullanim_loglari      CASCADE;
 DROP TABLE IF EXISTS public.muteahhit_yorumlar          CASCADE;
 DROP TABLE IF EXISTS public.muteahhit_referans_projeler CASCADE;
 DROP TABLE IF EXISTS public.muteahhit_profiller         CASCADE;
@@ -47,6 +48,10 @@ CREATE TYPE ihale_durumu    AS ENUM ('aktif', 'beklemede', 'tamamlandi', 'iptal'
 CREATE TYPE teklif_durumu   AS ENUM ('beklemede', 'kabul_edildi', 'reddedildi');
 CREATE TYPE belge_turu      AS ENUM ('ruhsat', 'proje', 'sozlesme', 'denetim_raporu', 'fotograf', 'diger', 'tapu', 'vekaletname', 'imza_sirkuleri');
 CREATE TYPE gorusme_durumu  AS ENUM ('beklemede', 'onaylandi', 'reddedildi', 'tamamlandi');
+-- odul_turu / davetler (arsa sahibi sure uzatma odulu + kayit anindaki
+-- otomatik davet odulu) tamamen kaldirildi -- bkz. bolum 10, davet
+-- sistemi artik yalnizca musteahhit teklif hakki odulu + gercek
+-- aktivasyon (teklif/ihale) sartina dayanir.
 -- hesap_turu, mevcut "rol" (kullanici_rol) ve plan_turu alanlarından bağımsızdır:
 -- yalnızca panel görünümünü ve davet ödül otomasyonunu belirler.
 CREATE TYPE hesap_turu_tipi AS ENUM ('arsa_sahibi', 'muteahhit', 'her_ikisi');
@@ -164,6 +169,12 @@ BEGIN
      OR NEW.premium_bitis_tarihi IS DISTINCT FROM OLD.premium_bitis_tarihi
      OR NEW.davet_kodu IS DISTINCT FROM OLD.davet_kodu
      OR NEW.davet_eden_id IS DISTINCT FROM OLD.davet_eden_id
+     OR NEW.uzatma_havuzu_gun IS DISTINCT FROM OLD.uzatma_havuzu_gun
+     -- ucretsiz_ihale_hakki_kullanildi: kullanici kendi ihale-olustur
+     -- akisinda false->true gecisini kendi PATCH'iyle yapar (mesru akis,
+     -- ihale-olustur/page.tsx), ama true->false'a geri cevirip hakkini
+     -- "sifirlayamaz".
+     OR (OLD.ucretsiz_ihale_hakki_kullanildi AND NOT COALESCE(NEW.ucretsiz_ihale_hakki_kullanildi, false))
   THEN
     RAISE EXCEPTION 'KISITLI_ALAN_DEGISTIRILEMEZ: Bu alanlar yalnizca admin/sistem tarafindan degistirilebilir.';
   END IF;
@@ -177,19 +188,17 @@ CREATE TRIGGER trg_kullanici_kisitli_sutun_kontrol
   BEFORE UPDATE ON public.kullanicilar
   FOR EACH ROW EXECUTE FUNCTION public.kullanici_kisitli_sutun_kontrol();
 
--- Yeni auth kaydında otomatik profil oluştur.
--- Kayıt sırasında bir davet kodu geldiyse (davet_referans_kodu), davet
--- eden kullanıcıyı bul ve davet_eden_id'yi bağla. E-posta doğrulaması
--- kapalı bir projede kullanıcı anında onaylı geldiyse (email_confirmed_at
--- dolu), ödül kaydını burada başlat — aksi halde bu iş
--- handle_davet_odul_kaydi() tetikleyicisiyle e-posta onayında yapılır.
--- hesap_turu metadata'dan gelir (kayıt formundaki 3 seçenek); tanımsız/
--- geçersizse arsa_sahibi'ye düşer.
+-- Yeni auth kaydında otomatik profil oluştur. hesap_turu metadata'dan
+-- gelir (kayıt formundaki 3 seçenek); tanımsız/geçersizse arsa_sahibi'ye
+-- düşer. Davet kodu artık kayıt anında İŞLENMEZ — davet ödülü yalnızca
+-- davet edilenin gerçekten teklif vermesi/ihale açmasıyla, ilgili
+-- formdaki "Davetiye Kodu" kutusu üzerinden tetiklenir (bkz. bölüm 10,
+-- davet_kodu_aktivasyonu). Yeni hesaba ücretsiz teklif hakkı verilmez
+-- (kalan_teklif_hakki = 0).
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
-  v_davet_eden_id uuid;
-  v_hesap_turu    hesap_turu_tipi;
+  v_hesap_turu hesap_turu_tipi;
 BEGIN
   v_hesap_turu := CASE NEW.raw_user_meta_data->>'hesap_turu'
     WHEN 'muteahhit' THEN 'muteahhit'::hesap_turu_tipi
@@ -197,27 +206,18 @@ BEGIN
     ELSE 'arsa_sahibi'::hesap_turu_tipi
   END;
 
-  SELECT id INTO v_davet_eden_id
-  FROM public.kullanicilar
-  WHERE davet_kodu = NEW.raw_user_meta_data->>'davet_referans_kodu';
-
   INSERT INTO public.kullanicilar
-    (id, email, ad_soyad, davet_kodu, davet_eden_id, hesap_turu, kalan_teklif_hakki)
+    (id, email, ad_soyad, davet_kodu, hesap_turu, kalan_teklif_hakki)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'ad_soyad', split_part(NEW.email, '@', 1)),
     public.gen_davet_kodu(),
-    v_davet_eden_id,
     v_hesap_turu,
-    1
+    0
   );
 
   INSERT INTO public.bildirim_tercihleri (kullanici_id) VALUES (NEW.id) ON CONFLICT DO NOTHING;
-
-  IF v_davet_eden_id IS NOT NULL AND NEW.email_confirmed_at IS NOT NULL THEN
-    PERFORM public.davet_odulunu_baslat(v_davet_eden_id, NEW.id);
-  END IF;
 
   RETURN NEW;
 END;
@@ -496,6 +496,13 @@ ALTER TABLE public.teklifler ADD CONSTRAINT teklifler_turu_veri_tutarli
     OR (teklif_turu = 'dosya' AND teklif_dosyasi_url IS NOT NULL)
   );
 
+-- Sahte/bos teklif tespiti: dosya boyutlari (bayt) upload aninda
+-- yazilir, ihale sahibinin sonuc raporunda ayni ihaledeki digerlerine
+-- gore "supheli derecede kucuk" tekliflerin tespiti icin kullanilir.
+ALTER TABLE public.teklifler
+  ADD COLUMN IF NOT EXISTS teklif_dosyasi_boyut   bigint,
+  ADD COLUMN IF NOT EXISTS alternatif_proje_boyut bigint;
+
 -- ------------------------------------------------------------
 -- 4. DANIŞMANLAR
 -- Yalnızca admin tarafından eklenir.
@@ -559,6 +566,10 @@ CREATE TABLE public.belgeler (
   dosya_tipi    text,
   boyut         bigint,                      -- bayt cinsinden
   tur           belge_turu  NOT NULL DEFAULT 'diger',
+  -- Yalnizca tur='tapu' satirlarinda doldurulur (istemci tarafinda
+  -- SHA-256 ile hesaplanir) -- ayni tapunun birden fazla ihalede
+  -- kullanilip kullanilmadigini admin panelinde tespit etmek icin.
+  dosya_hash    text,
   ihale_id      uuid        REFERENCES public.ihaleler(id) ON DELETE CASCADE,
   danishman_id  uuid        REFERENCES public.danishmanlar(id) ON DELETE CASCADE,
   yukleyen_id   uuid        REFERENCES public.kullanicilar(id) ON DELETE SET NULL,
@@ -572,6 +583,7 @@ CREATE TABLE public.belgeler (
 CREATE INDEX idx_belgeler_ihale     ON public.belgeler(ihale_id);
 CREATE INDEX idx_belgeler_danishman ON public.belgeler(danishman_id);
 CREATE INDEX idx_belgeler_yukleyen  ON public.belgeler(yukleyen_id);
+CREATE INDEX idx_belgeler_tapu_hash ON public.belgeler(dosya_hash) WHERE tur = 'tapu';
 
 ALTER TABLE public.belgeler ENABLE ROW LEVEL SECURITY;
 
@@ -705,16 +717,24 @@ ALTER TABLE public.kullanicilar
   ADD COLUMN IF NOT EXISTS kalan_teklif_hakki    integer NOT NULL DEFAULT 2,
   ADD COLUMN IF NOT EXISTS toplam_teklif_sayisi  integer NOT NULL DEFAULT 0;
 
--- Ücretsiz teklif hakkı 2'den 1'e düşürüldü — yalnızca kolon varsayılanı
--- değişir, mevcut kullanıcıların kalan_teklif_hakki değeri etkilenmez.
+-- Müteahhit ücretsiz teklif hakkı tamamen kaldırıldı (2 → 1 → 0) —
+-- yalnızca kolon varsayılanı değişir, mevcut kullanıcıların
+-- kalan_teklif_hakki değeri etkilenmez.
 ALTER TABLE public.kullanicilar
-  ALTER COLUMN kalan_teklif_hakki SET DEFAULT 1;
+  ALTER COLUMN kalan_teklif_hakki SET DEFAULT 0;
 
 -- Ücretsiz plandaki 1 ihale hakkı tek kullanımlıktır: kullanıcı ilk
 -- ihalesini yayınladığında bu alan true olur, ikinci deneme
--- (ihale-olustur sayfasında) buna bakılarak engellenir.
+-- (ihale-olustur sayfasında) buna bakılarak engellenir. Süre yine
+-- PLAN_ILK_IHALE_GUNU.ucretsiz (5 gün) ile sınırlıdır.
 ALTER TABLE public.kullanicilar
   ADD COLUMN IF NOT EXISTS ucretsiz_ihale_hakki_kullanildi boolean NOT NULL DEFAULT false;
+
+-- Premium'un (tek seferlik satın alma) 45 günlük, farklı ihalelere
+-- dağıtılabilir süre ekleme havuzu. Kurumsal bu havuzu kullanmaz (kendi
+-- aylık/elapsed-day uzatma mantığı aynen korunur, bkz. PLAN_UZATMA_LIMITI).
+ALTER TABLE public.kullanicilar
+  ADD COLUMN IF NOT EXISTS uzatma_havuzu_gun integer NOT NULL DEFAULT 0;
 
 -- E-posta bildirim tercihleri (in-app bildirim_tercihleri'nden ayri;
 -- hangi olaylarda e-posta almak istedigini tutar). Su asamada yalnizca
@@ -770,6 +790,75 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION public.artir_teklif_hakki(uuid, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.artir_teklif_hakki(uuid, integer) TO service_role;
+
+-- Premium satin alma (tek seferlik) sonrasi uzatma havuzuna +45 gun
+-- ekler. Yalnizca service_role (api/odeme/route.ts) cagirabilir.
+CREATE OR REPLACE FUNCTION public.premium_havuz_ekle(p_kullanici_id uuid)
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_yeni_havuz integer;
+BEGIN
+  PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
+  UPDATE public.kullanicilar
+  SET uzatma_havuzu_gun = uzatma_havuzu_gun + 45
+  WHERE id = p_kullanici_id
+  RETURNING uzatma_havuzu_gun INTO v_yeni_havuz;
+
+  RETURN v_yeni_havuz;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.premium_havuz_ekle(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.premium_havuz_ekle(uuid) TO service_role;
+
+-- İhale sahibi, Premium uzatma havuzundan gün düşerek AKTİF bir
+-- ihalesinin süresini uzatır. Sahiplik + aktiflik kontrolü ve havuz
+-- yeterliliği burada, SECURITY DEFINER içinde garanti edilir.
+CREATE OR REPLACE FUNCTION public.ihale_suresini_uzat(
+  p_ihale_id uuid,
+  p_gun      integer
+)
+RETURNS date LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_havuz      integer;
+  v_yeni_tarih date;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Giris yapmalisiniz.';
+  END IF;
+
+  IF p_gun IS NULL OR p_gun <= 0 THEN
+    RAISE EXCEPTION 'Gecerli bir gun sayisi girin.';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.ihaleler WHERE id = p_ihale_id AND olusturan_id = auth.uid() AND durum = 'aktif'
+  ) THEN
+    RAISE EXCEPTION 'Bu ihale size ait aktif bir ihale degil.';
+  END IF;
+
+  SELECT uzatma_havuzu_gun INTO v_havuz FROM public.kullanicilar WHERE id = auth.uid() FOR UPDATE;
+
+  IF v_havuz IS NULL OR v_havuz < p_gun THEN
+    RAISE EXCEPTION 'UZATMA_HAVUZU_YETERSIZ: Uzatma havuzunuzda yeterli gun yok.';
+  END IF;
+
+  PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
+
+  UPDATE public.kullanicilar
+  SET uzatma_havuzu_gun = uzatma_havuzu_gun - p_gun
+  WHERE id = auth.uid();
+
+  UPDATE public.ihaleler
+  SET bitis_tarihi = bitis_tarihi + p_gun, updated_at = now()
+  WHERE id = p_ihale_id
+  RETURNING bitis_tarihi INTO v_yeni_tarih;
+
+  RETURN v_yeni_tarih;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ihale_suresini_uzat(uuid, integer) TO authenticated;
 
 -- ------------------------------------------------------------
 -- 8. MÜTEAHHİT PROFİLLER
@@ -1030,37 +1119,39 @@ CREATE POLICY "Giris yapan kendi teklif dosyasini yukleyebilir"
     AND (storage.foldername(name))[2] = auth.uid()::text
   );
 
+-- Admin, "Sorgulanan Teklifler" panelinde bildirilen teklifin dosyasini
+-- ihale bitmemis/kendi ihalesi olmasa bile her zaman acabilir.
 CREATE POLICY "Teklif dosyasi sadece ihale bitince yetkiliye acik"
   ON storage.objects FOR SELECT USING (
     bucket_id = 'ihale-teklif-dosyalari'
-    AND EXISTS (
-      SELECT 1 FROM public.ihaleler i
-      WHERE i.id::text = (storage.foldername(name))[1]
-        AND (i.durum = 'tamamlandi' OR (i.durum = 'aktif' AND i.bitis_tarihi < CURRENT_DATE))
-        AND (
-          i.olusturan_id = auth.uid()
-          OR EXISTS (SELECT 1 FROM public.teklifler t WHERE t.ihale_id = i.id AND t.kullanici_id = auth.uid())
-          OR EXISTS (SELECT 1 FROM public.kullanicilar k WHERE k.id = auth.uid() AND k.plan_turu = 'kurumsal')
-        )
+    AND (
+      public.is_admin()
+      OR EXISTS (
+        SELECT 1 FROM public.ihaleler i
+        WHERE i.id::text = (storage.foldername(name))[1]
+          AND (i.durum = 'tamamlandi' OR (i.durum = 'aktif' AND i.bitis_tarihi < CURRENT_DATE))
+          AND (
+            i.olusturan_id = auth.uid()
+            OR EXISTS (SELECT 1 FROM public.teklifler t WHERE t.ihale_id = i.id AND t.kullanici_id = auth.uid())
+            OR EXISTS (SELECT 1 FROM public.kullanicilar k WHERE k.id = auth.uid() AND k.plan_turu = 'kurumsal')
+          )
+      )
     )
   );
 
 -- ------------------------------------------------------------
--- 10. ARKADAŞINI DAVET ET SİSTEMİ
+-- 10. MÜTEAHHİT DAVET SİSTEMİ
 -- Her kullanıcının benzersiz bir davet_kodu'su vardır (bkz. handle_new_user).
--- Yeni kullanıcı bu kodla kayıt olup e-postasını onaylayınca
--- davet_odulunu_baslat() çağrılır. Ödül türü davet eden kişinin
--- hesap_turu'suna göre otomatik belirlenir:
---   - muteahhit  → +1 teklif hakkı, anında uygulanır (bekleme yok).
---   - arsa_sahibi → 15 gün süre uzatma; tam olarak 1 aktif ihalesi varsa
---     anında o ihaleye uygulanır, değilse (0 ya da >1) panelden hangi
---     ihaleye uygulanacağı seçilene kadar bekler.
---   - her_ikisi  → ödül türünü de, ihaleyi de davet eden kişi panelden
---     seçer (eski davranış).
--- Panelden yapılan seçim davet_odulu_uygula() RPC'si ile uygulanır.
+-- Eski model (kayıt anında/e-posta onayında otomatik ödül, arsa sahibi
+-- için 15 gün süre uzatma) TAMAMEN kaldırıldı. Yeni kural:
+--   - Ödül yalnızca +1 teklif hakkıdır ve yalnızca davet edilen kişi bu
+--     kodu kullanarak GERÇEKTEN bir ihaleye teklif verdiğinde ya da bir
+--     ihale açtığında (davet_kodu_aktivasyonu RPC'si, ilgili formdaki
+--     "Davetiye Kodu" kutusundan çağrılır) tanımlanır — kayıt olmak
+--     yeterli değildir.
+--   - Davet eden kişi ayda en fazla 1 kez bu yoldan hak kazanabilir
+--     (davet_kullanim_loglari, ay_yil bazlı sayım).
 -- ------------------------------------------------------------
-
-CREATE TYPE odul_turu AS ENUM ('teklif_hakki', 'sure_uzatma');
 
 -- Benzersiz, 8 karakterlik davet kodu üretir.
 CREATE OR REPLACE FUNCTION public.gen_davet_kodu()
@@ -1080,196 +1171,109 @@ $$;
 -- projeye bu bölüm eklendiğinde mevcut kullanıcılara davet kodu atar.
 UPDATE public.kullanicilar SET davet_kodu = public.gen_davet_kodu() WHERE davet_kodu IS NULL;
 
-CREATE TABLE public.davetler (
-  id                   uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  davet_eden_id        uuid        NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
-  davet_edilen_id      uuid        NOT NULL UNIQUE REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
-  odul_verildi         boolean     NOT NULL DEFAULT false,
-  odul_turu            odul_turu,
-  uygulanan_ihale_id   uuid        REFERENCES public.ihaleler(id) ON DELETE SET NULL,
-  created_at           timestamptz NOT NULL DEFAULT now(),
-  odul_verildi_tarihi  timestamptz
+CREATE TABLE public.davet_kullanim_loglari (
+  id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  davet_eden_id     uuid        NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  davet_edilen_id   uuid        NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  aktivasyon_tarihi timestamptz NOT NULL DEFAULT now(),
+  aktivasyon_turu   text        NOT NULL CHECK (aktivasyon_turu IN ('teklif', 'ihale')),
+  ay_yil            text        NOT NULL
 );
 
-CREATE INDEX idx_davetler_eden  ON public.davetler(davet_eden_id);
-CREATE INDEX idx_davetler_durum ON public.davetler(odul_verildi);
+CREATE INDEX idx_davet_loglari_eden_ay ON public.davet_kullanim_loglari(davet_eden_id, ay_yil);
 
-ALTER TABLE public.davetler ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.davet_kullanim_loglari ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Davet eden kendi davetlerini gorebilir"
-  ON public.davetler FOR SELECT USING (auth.uid() = davet_eden_id);
+CREATE POLICY "Davet eden kendi loglarini gorebilir"
+  ON public.davet_kullanim_loglari FOR SELECT USING (auth.uid() = davet_eden_id);
 
--- Davet eden kişinin hesap_turu'suna göre ödülü ya anında uygular ya da
--- panelden seçilmek üzere bekleyen bir kayıt açar. SECURITY DEFINER —
--- yalnızca handle_new_user/handle_davet_odul_kaydi tetikleyicilerinden
--- çağrılır, doğrudan istemciden çağrılamaz (public RPC olarak açılmadı).
-CREATE OR REPLACE FUNCTION public.davet_odulunu_baslat(p_eden_id uuid, p_edilen_id uuid)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_hesap_turu  hesap_turu_tipi;
-  v_ihale_id    uuid;
-  v_aktif_sayi  integer;
-BEGIN
-  SELECT hesap_turu INTO v_hesap_turu FROM public.kullanicilar WHERE id = p_eden_id;
+-- INSERT icin kasitli olarak hicbir politika yok: yalnizca asagidaki
+-- SECURITY DEFINER RPC (davet_kodu_aktivasyonu) RLS'i atlayarak yazar.
 
-  IF v_hesap_turu = 'muteahhit' THEN
-    PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
-    UPDATE public.kullanicilar
-    SET kalan_teklif_hakki = CASE
-      WHEN kalan_teklif_hakki >= 99999 THEN kalan_teklif_hakki
-      ELSE kalan_teklif_hakki + 1
-    END
-    WHERE id = p_eden_id;
-
-    INSERT INTO public.davetler (davet_eden_id, davet_edilen_id, odul_verildi, odul_turu, odul_verildi_tarihi)
-    VALUES (p_eden_id, p_edilen_id, true, 'teklif_hakki', now())
-    ON CONFLICT (davet_edilen_id) DO NOTHING;
-
-  ELSIF v_hesap_turu = 'arsa_sahibi' THEN
-    SELECT count(*) INTO v_aktif_sayi FROM public.ihaleler WHERE olusturan_id = p_eden_id AND durum = 'aktif';
-
-    IF v_aktif_sayi = 1 THEN
-      SELECT id INTO v_ihale_id FROM public.ihaleler WHERE olusturan_id = p_eden_id AND durum = 'aktif';
-
-      UPDATE public.ihaleler SET bitis_tarihi = bitis_tarihi + 15 WHERE id = v_ihale_id;
-
-      INSERT INTO public.davetler (davet_eden_id, davet_edilen_id, odul_verildi, odul_turu, uygulanan_ihale_id, odul_verildi_tarihi)
-      VALUES (p_eden_id, p_edilen_id, true, 'sure_uzatma', v_ihale_id, now())
-      ON CONFLICT (davet_edilen_id) DO NOTHING;
-    ELSE
-      -- 0 ya da >1 aktif ihale: hangisine uygulanacağı panelden seçilecek.
-      INSERT INTO public.davetler (davet_eden_id, davet_edilen_id, odul_turu)
-      VALUES (p_eden_id, p_edilen_id, 'sure_uzatma')
-      ON CONFLICT (davet_edilen_id) DO NOTHING;
-    END IF;
-
-  ELSE -- her_ikisi: ödül türünü de ihaleyi de davet eden kişi panelden seçer
-    INSERT INTO public.davetler (davet_eden_id, davet_edilen_id)
-    VALUES (p_eden_id, p_edilen_id)
-    ON CONFLICT (davet_edilen_id) DO NOTHING;
-  END IF;
-END;
-$$;
-
--- E-posta onaylanınca (email_confirmed_at NULL'dan dolu hale geçince)
--- ödül sürecini başlat.
-CREATE OR REPLACE FUNCTION public.handle_davet_odul_kaydi()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_eden_id uuid;
-BEGIN
-  IF OLD.email_confirmed_at IS NULL AND NEW.email_confirmed_at IS NOT NULL THEN
-    SELECT davet_eden_id INTO v_eden_id FROM public.kullanicilar WHERE id = NEW.id;
-    IF v_eden_id IS NOT NULL THEN
-      PERFORM public.davet_odulunu_baslat(v_eden_id, NEW.id);
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER on_auth_user_email_confirmed
-  AFTER UPDATE ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_davet_odul_kaydi();
-
--- Davet eden kişi bekleyen ödülünü uygular (panelden çağrılır).
--- odul_turu davet açılışında zaten belirlenmişse (arsa_sahibi → sure_uzatma)
--- istemciden gelen p_odul_turu yok sayılır, kayıttaki tür esas alınır —
--- yalnızca her_ikisi kaynaklı (odul_turu NULL) davetlerde istemci seçimi
--- geçerlidir. auth.uid() ile davet_eden_id eşleşmesi ve daha önce ödül
--- verilmediği kontrol edilir; bu yüzden SECURITY DEFINER olmasına rağmen
--- anon-key ile çağrılması güvenlidir.
-CREATE OR REPLACE FUNCTION public.davet_odulu_uygula(
-  p_davet_id  uuid,
-  p_odul_turu odul_turu,
-  p_ihale_id  uuid DEFAULT NULL
+-- Davet edilen kisi (auth.uid()) bir davet kodu ile gercekten teklif
+-- verdiginde/ihale actiginde ilgili formdan cagrilir.
+CREATE OR REPLACE FUNCTION public.davet_kodu_aktivasyonu(
+  p_davet_kodu      text,
+  p_aktivasyon_turu text
 )
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
-  v_davet     public.davetler%ROWTYPE;
-  v_odul_turu odul_turu;
+  v_eden_id    uuid;
+  v_ay_yil     text := to_char(now(), 'YYYY-MM');
+  v_bu_ay_sayi integer;
 BEGIN
-  SELECT * INTO v_davet FROM public.davetler WHERE id = p_davet_id FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Davet bulunamadı';
+  IF auth.uid() IS NULL OR p_davet_kodu IS NULL OR trim(p_davet_kodu) = '' THEN
+    RETURN;
   END IF;
 
-  IF v_davet.davet_eden_id <> auth.uid() THEN
-    RAISE EXCEPTION 'Bu davet size ait değil';
+  IF p_aktivasyon_turu NOT IN ('teklif', 'ihale') THEN
+    RETURN;
   END IF;
 
-  IF v_davet.odul_verildi THEN
-    RAISE EXCEPTION 'Bu davet için ödül zaten verildi';
+  SELECT id INTO v_eden_id FROM public.kullanicilar WHERE davet_kodu = upper(trim(p_davet_kodu));
+
+  -- Kod bulunamadi ya da kullanici kendi kodunu kullanmaya calisiyor.
+  IF v_eden_id IS NULL OR v_eden_id = auth.uid() THEN
+    RETURN;
   END IF;
 
-  v_odul_turu := COALESCE(v_davet.odul_turu, p_odul_turu);
+  SELECT count(*) INTO v_bu_ay_sayi
+  FROM public.davet_kullanim_loglari
+  WHERE davet_eden_id = v_eden_id AND ay_yil = v_ay_yil;
 
-  IF v_odul_turu = 'teklif_hakki' THEN
-    PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
-    UPDATE public.kullanicilar
-    SET kalan_teklif_hakki = CASE
-      WHEN kalan_teklif_hakki >= 99999 THEN kalan_teklif_hakki
-      ELSE kalan_teklif_hakki + 1
-    END
-    WHERE id = auth.uid();
-
-  ELSIF v_odul_turu = 'sure_uzatma' THEN
-    IF p_ihale_id IS NULL THEN
-      RAISE EXCEPTION 'İhale seçimi zorunludur';
+  IF v_bu_ay_sayi >= 1 THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.bildirimler
+      WHERE kullanici_id = v_eden_id AND tur = 'davet_limit_asildi'
+        AND created_at >= date_trunc('month', now())
+    ) THEN
+      INSERT INTO public.bildirimler (kullanici_id, tur, baslik, mesaj, link)
+      VALUES (
+        v_eden_id, 'davet_limit_asildi', 'Bu ay davet limitinize ulaştınız',
+        'Davet yoluyla ayda en fazla 1 teklif hakkı kazanabilirsiniz, bu ayki hakkınızı zaten kullandınız.',
+        '/panel'
+      );
     END IF;
-
-    UPDATE public.ihaleler
-    SET bitis_tarihi = bitis_tarihi + 15
-    WHERE id = p_ihale_id AND olusturan_id = auth.uid() AND durum = 'aktif';
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'İhale bulunamadı ya da size ait aktif bir ihale değil';
-    END IF;
+    RETURN;
   END IF;
 
-  UPDATE public.davetler
-  SET odul_verildi        = true,
-      odul_turu            = v_odul_turu,
-      uygulanan_ihale_id   = p_ihale_id,
-      odul_verildi_tarihi  = now()
-  WHERE id = p_davet_id;
+  INSERT INTO public.davet_kullanim_loglari (davet_eden_id, davet_edilen_id, aktivasyon_turu, ay_yil)
+  VALUES (v_eden_id, auth.uid(), p_aktivasyon_turu, v_ay_yil);
+
+  PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
+  UPDATE public.kullanicilar
+  SET kalan_teklif_hakki = CASE
+    WHEN kalan_teklif_hakki >= 99999 THEN kalan_teklif_hakki
+    ELSE kalan_teklif_hakki + 1
+  END
+  WHERE id = v_eden_id;
+
+  INSERT INTO public.bildirimler (kullanici_id, tur, baslik, mesaj, link)
+  VALUES (
+    v_eden_id, 'davet_odulu', 'Davet ödülünüz uygulandı',
+    'Davetiniz kabul edildi ve +1 teklif hakkı kazandınız.',
+    '/panel'
+  );
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION public.davet_kodu_aktivasyonu(text, text) TO authenticated;
 
 -- signInWithOAuth() bir signUp() gibi bizim custom metadata'mızı taşımaz
--- (data alanı yok); bu yüzden hesap_turu seçimi ve davet kodu bağlantısı
--- Google/Apple ile kayıtta /auth/callback rotasından, oturum açıldıktan
--- hemen sonra bu RPC ile tamamlanır. auth.uid() = kendi profili dışında
--- hiçbir satırı etkilemez.
+-- (data alanı yok); bu yüzden hesap_turu seçimi Google/Apple ile kayıtta
+-- /auth/callback rotasından, oturum açıldıktan hemen sonra bu RPC ile
+-- tamamlanır. auth.uid() = kendi profili dışında hiçbir satırı etkilemez.
+-- p_ref_kodu artik islenmiyor (davet kodu kayitta degil, teklif/ihale
+-- formunda islenir) — parametre yalnizca geriye donuk cagrilar hata
+-- vermesin diye korunmustur.
 CREATE OR REPLACE FUNCTION public.oauth_kayit_tamamla(
   p_hesap_turu hesap_turu_tipi DEFAULT NULL,
   p_ref_kodu   text DEFAULT NULL
 )
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_eden_id  uuid;
-  v_mevcut   uuid;
 BEGIN
   IF p_hesap_turu IS NOT NULL THEN
     UPDATE public.kullanicilar SET hesap_turu = p_hesap_turu WHERE id = auth.uid();
-  END IF;
-
-  IF p_ref_kodu IS NOT NULL THEN
-    SELECT davet_eden_id INTO v_mevcut FROM public.kullanicilar WHERE id = auth.uid();
-
-    IF v_mevcut IS NULL THEN
-      SELECT id INTO v_eden_id FROM public.kullanicilar WHERE davet_kodu = upper(p_ref_kodu);
-
-      IF v_eden_id IS NOT NULL AND v_eden_id <> auth.uid() THEN
-        PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
-        UPDATE public.kullanicilar SET davet_eden_id = v_eden_id WHERE id = auth.uid();
-
-        IF (SELECT email_confirmed_at FROM auth.users WHERE id = auth.uid()) IS NOT NULL THEN
-          PERFORM public.davet_odulunu_baslat(v_eden_id, auth.uid());
-        END IF;
-      END IF;
-    END IF;
   END IF;
 END;
 $$;
@@ -1336,6 +1340,53 @@ CREATE POLICY "Admin tum odeme kayitlarini gorebilir"
 -- INSERT yalnizca service_role'den (api/odeme/route.ts) gelir; service
 -- role RLS'i tamamen atladigi icin ayri bir INSERT politikasi gerekmez,
 -- authenticated/anon icin INSERT taniml bile degil (varsayilan: red).
+
+-- ------------------------------------------------------------
+-- 12b. TEKLİF BİLDİRİMLERİ
+-- İhale sahibi, supheli/sahte bir teklifi bildirir; admin inceler ve
+-- gerekirse muteahhide ikaz gonderir (bkz. api/email/teklif-ikazi).
+-- ------------------------------------------------------------
+
+CREATE TABLE public.teklif_bildirimleri (
+  id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  teklif_id           uuid        NOT NULL REFERENCES public.teklifler(id) ON DELETE CASCADE,
+  ihale_id            uuid        NOT NULL REFERENCES public.ihaleler(id) ON DELETE CASCADE,
+  bildiren_id         uuid        NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  sebep               text        NOT NULL CHECK (sebep IN (
+                        'dosya_bos', 'proje_ilgisiz', 'sartlar_eksik', 'sahte_kopya', 'diger'
+                      )),
+  aciklama            text,
+  durum               text        NOT NULL DEFAULT 'beklemede'
+                        CHECK (durum IN ('beklemede', 'incelendi', 'ikaz_gonderildi')),
+  admin_notu          text,
+  ikaz_gonderildi     boolean     NOT NULL DEFAULT false,
+  olusturulma_tarihi  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_teklif_bildirimleri_ihale    ON public.teklif_bildirimleri(ihale_id);
+CREATE INDEX idx_teklif_bildirimleri_durum    ON public.teklif_bildirimleri(durum);
+CREATE INDEX idx_teklif_bildirimleri_bildiren ON public.teklif_bildirimleri(bildiren_id);
+
+ALTER TABLE public.teklif_bildirimleri ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Bildiren ve admin gorebilir"
+  ON public.teklif_bildirimleri FOR SELECT USING (
+    auth.uid() = bildiren_id OR public.is_admin()
+  );
+
+-- Yalnizca GERCEK ihale sahibi, KENDI ihalesindeki bir teklifi
+-- bildirebilir -- bildiren_id sahtekarlik yapip baskasi adina ya da
+-- kendisine ait olmayan bir ihale icin bildirim acamaz.
+CREATE POLICY "Ihale sahibi kendi ihalesi icin teklif bildirebilir"
+  ON public.teklif_bildirimleri FOR INSERT WITH CHECK (
+    auth.uid() = bildiren_id
+    AND EXISTS (SELECT 1 FROM public.ihaleler WHERE id = ihale_id AND olusturan_id = auth.uid())
+    AND EXISTS (SELECT 1 FROM public.teklifler WHERE id = teklif_id AND ihale_id = teklif_bildirimleri.ihale_id)
+  );
+
+-- admin_notu/durum/ikaz_gonderildi yalnizca admin tarafindan guncellenir.
+CREATE POLICY "Admin bildirimi guncelleyebilir"
+  ON public.teklif_bildirimleri FOR UPDATE USING (public.is_admin());
 
 -- ------------------------------------------------------------
 -- 13. BİLDİRİMLER
@@ -1479,32 +1530,10 @@ CREATE TRIGGER trg_bildirim_ihale_durumu
   AFTER UPDATE ON public.ihaleler
   FOR EACH ROW EXECUTE FUNCTION public.bildirim_ihale_durumu();
 
--- 3) Davet ödülü uygulanınca davet edene bildirim.
-CREATE OR REPLACE FUNCTION public.bildirim_davet_odulu()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  IF NEW.odul_verildi = true AND OLD.odul_verildi IS DISTINCT FROM true
-     AND COALESCE((SELECT davet_odulu FROM public.bildirim_tercihleri WHERE kullanici_id = NEW.davet_eden_id), true)
-  THEN
-    INSERT INTO public.bildirimler (kullanici_id, tur, baslik, mesaj, link)
-    VALUES (
-      NEW.davet_eden_id, 'davet_odulu', 'Davet ödülünüz uygulandı',
-      CASE NEW.odul_turu
-        WHEN 'teklif_hakki' THEN 'Davetiniz kabul edildi, +1 teklif hakkı kazandınız.'
-        WHEN 'sure_uzatma'  THEN 'Davetiniz kabul edildi, bir ihalenizin süresi 15 gün uzatıldı.'
-        ELSE 'Davet ödülünüz hesabınıza tanımlandı.'
-      END,
-      '/panel'
-    );
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS trg_bildirim_davet_odulu ON public.davetler;
-CREATE TRIGGER trg_bildirim_davet_odulu
-  AFTER INSERT OR UPDATE ON public.davetler
-  FOR EACH ROW EXECUTE FUNCTION public.bildirim_davet_odulu();
+-- 3) Davet ödülü / davet limiti bildirimleri artık davetler tablosuna
+-- bağlı bir trigger ile değil, doğrudan davet_kodu_aktivasyonu() RPC'si
+-- içinde (bkz. bölüm 10) INSERT edilir — davetler tablosu kaldırıldığı
+-- için ayrı bir trigger'a gerek yok.
 
 -- 4) Ödeme sonrası kredi/plan güncellemesi başarısız olursa (mutabakat
 -- hatası) kullaniciya bildirim.
@@ -1582,7 +1611,7 @@ ON CONFLICT (kullanici_id) DO NOTHING;
 ALTER TABLE public.bildirimler DROP CONSTRAINT IF EXISTS bildirimler_tur_check;
 ALTER TABLE public.bildirimler ADD CONSTRAINT bildirimler_tur_check CHECK (tur IN (
   'yeni_teklif', 'ihale_onaylandi', 'ihale_reddedildi', 'ihale_otomatik_sonlandi',
-  'davet_odulu', 'odeme_sorunu', 'bolge_eslesmesi'
+  'davet_odulu', 'odeme_sorunu', 'bolge_eslesmesi', 'davet_limit_asildi', 'teklif_ikazi'
 ));
 
 CREATE OR REPLACE FUNCTION public.bolge_eslesmesi_bildir()
