@@ -26,7 +26,31 @@ const INCELEME_BADGE: Record<IncelemeDurumu, { etiket: string; cls: string }> = 
   reddedildi: { etiket: "Reddedildi",  cls: "bg-red-100 text-red-600" },
 };
 
+// EslesenIhale.durum, ihaleler.durum'dur (aktif/beklemede/tamamlandi/iptal)
+// -- inceleme_durumu degil -- uyari kartlarinda ayri bir etiket kullanilir.
+const IHALE_DURUM_ETIKETI: Record<string, string> = {
+  aktif: "Aktif", beklemede: "Beklemede", tamamlandi: "Tamamlandı", iptal: "İptal",
+};
+
 const OZEL_BUCKET = "ihale-tapu-belgeleri";
+
+// Sistemde ihaleler icin siralı bir "ihale numarasi" alani yok (id
+// UUID) -- uyarilarda/listede kisa, okunabilir bir referans kodu olarak
+// UUID'nin ilk 8 karakteri kullanilir.
+function kisaKod(id: string): string {
+  return "#" + id.slice(0, 8).toUpperCase();
+}
+
+interface EslesenIhale {
+  id: string;
+  baslik: string;
+  durum: string;
+  created_at: string;
+}
+
+function tarihFormatKisa(iso: string) {
+  return new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
+}
 
 function formatBoyut(bytes?: number | null): string {
   if (!bytes) return "";
@@ -69,6 +93,8 @@ export default function AdminIhaleIncele() {
   const [redFormuAcik, setRedFormuAcik] = useState(false);
   const [redSebebi,  setRedSebebi]  = useState("");
   const [islemYapiliyor, setIslemYapiliyor] = useState(false);
+  const [mukerrerTapuIhaleler, setMukerrerTapuIhaleler] = useState<EslesenIhale[]>([]);
+  const [benzerAdaParselIhaleler, setBenzerAdaParselIhaleler] = useState<EslesenIhale[]>([]);
   const redSebebiRef = useRef<HTMLTextAreaElement>(null);
 
   function hizliSebepEkle(sebep: string) {
@@ -106,7 +132,8 @@ export default function AdminIhaleIncele() {
     ]);
 
     if (!ihaleData) { setBulunamadi(true); setYukleniyor(false); return; }
-    setIhale(ihaleData as Ihale);
+    const ihaleOkunan = ihaleData as Ihale;
+    setIhale(ihaleOkunan);
     const belgeListesi = (belgeData ?? []) as Belge[];
     setBelgeler(belgeListesi);
 
@@ -119,6 +146,49 @@ export default function AdminIhaleIncele() {
       })
     );
     setImzaliUrller(Object.fromEntries(urlGirdileri.filter(([, url]) => url)));
+
+    // ─── Tapu mükerrerlik kontrolü: aynı SHA-256 hash'e sahip başka bir
+    // tapu belgesi var mı? (belgeler SELECT RLS'i tapu türünü zaten
+    // yalnızca admin'e açıyor, ekstra bir RPC gerekmez.)
+    const tapuBelge = belgeListesi.find((b) => b.tur === "tapu");
+    if (tapuBelge?.dosya_hash) {
+      const { data: eslesenBelgeler } = await supabase
+        .from("belgeler")
+        .select("ihale_id")
+        .eq("tur", "tapu")
+        .eq("dosya_hash", tapuBelge.dosya_hash)
+        .neq("ihale_id", id);
+      const eslesenIhaleIdler = [...new Set((eslesenBelgeler ?? []).map((b) => b.ihale_id).filter((x): x is string => !!x))];
+      if (eslesenIhaleIdler.length > 0) {
+        const { data: eslesenIhaleler } = await supabase
+          .from("ihaleler")
+          .select("id, baslik, durum, created_at")
+          .in("id", eslesenIhaleIdler);
+        setMukerrerTapuIhaleler((eslesenIhaleler ?? []) as EslesenIhale[]);
+      } else {
+        setMukerrerTapuIhaleler([]);
+      }
+    } else {
+      setMukerrerTapuIhaleler([]);
+    }
+
+    // ─── Aynı ada/parsel/il/ilçe kombinasyonuyla başka AKTİF bir ihale
+    // var mı? (ihaleler herkese açık SELECT, ekstra yetki gerekmez.)
+    if (ihaleOkunan.ada_no && ihaleOkunan.parsel_no) {
+      let sorgu = supabase
+        .from("ihaleler")
+        .select("id, baslik, durum, created_at")
+        .eq("sehir", ihaleOkunan.sehir)
+        .eq("ada_no", ihaleOkunan.ada_no)
+        .eq("parsel_no", ihaleOkunan.parsel_no)
+        .eq("durum", "aktif")
+        .neq("id", id);
+      sorgu = ihaleOkunan.ilce ? sorgu.eq("ilce", ihaleOkunan.ilce) : sorgu.is("ilce", null);
+      const { data: benzerIhaleler } = await sorgu;
+      setBenzerAdaParselIhaleler((benzerIhaleler ?? []) as EslesenIhale[]);
+    } else {
+      setBenzerAdaParselIhaleler([]);
+    }
 
     setYukleniyor(false);
   }, [id]);
@@ -215,6 +285,41 @@ export default function AdminIhaleIncele() {
           {INCELEME_BADGE[durum].etiket}
         </span>
       </div>
+
+      {/* Tapu mükerrerlik uyarısı — onay/red aksiyonlarını engellemez, sadece görünür kalır. */}
+      {mukerrerTapuIhaleler.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-5 mb-4">
+          <p className="text-sm font-bold text-red-800 mb-2">
+            ⛔ DİKKAT: Bu tapu belgesi daha önce kullanılmış. İlgili ihale(ler):
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {mukerrerTapuIhaleler.map((e) => (
+              <li key={e.id} className="text-sm text-red-700">
+                <Link href={`/admin/ihaleler/${e.id}`} className="font-semibold hover:underline">
+                  {kisaKod(e.id)} - {e.baslik}
+                </Link>
+                {" — "}{IHALE_DURUM_ETIKETI[e.durum] ?? e.durum}{" — "}{tarihFormatKisa(e.created_at)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Ada/parsel benzerliği uyarısı */}
+      {benzerAdaParselIhaleler.length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 mb-6">
+          <p className="text-sm font-bold text-amber-800 mb-2">⚠ Aynı ada-parsel bilgisiyle başka bir ihale mevcut:</p>
+          <ul className="flex flex-col gap-1.5">
+            {benzerAdaParselIhaleler.map((e) => (
+              <li key={e.id} className="text-sm text-amber-700">
+                <Link href={`/admin/ihaleler/${e.id}`} className="font-semibold hover:underline">
+                  {kisaKod(e.id)} - {e.baslik}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {hata && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-6">{hata}</div>

@@ -12,6 +12,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Link href="/admin/danismanlar" className="text-gray-300 hover:text-white transition-colors">
             Destek Uzmanları
           </Link>
+          <Link href="/admin/sorgulanan-teklifler" className="text-gray-300 hover:text-white transition-colors">
+            Sorgulanan Teklifler
+          </Link>
         </nav>
         <Link href="/" className="ml-auto text-gray-400 hover:text-white text-sm transition-colors">
           ← Siteye Dön

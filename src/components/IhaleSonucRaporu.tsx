@@ -16,7 +16,8 @@ import {
 } from "recharts";
 import { createClient } from "@/lib/supabase/client";
 import { mockMuteahhitYorumlar, type MockTeklif } from "@/lib/mock-data";
-import type { PlanTuru } from "@/lib/types";
+import type { PlanTuru, TeklifBildirimSebebi } from "@/lib/types";
+import { SEBEP_ETIKETLERI, SEBEP_SIRASI } from "@/lib/teklif-ikaz";
 import { useTeklifRaporuErisimi } from "@/hooks/useTeklifRaporuErisimi";
 import { useGercekTeklifErisimi } from "@/hooks/useGercekTeklifErisimi";
 import {
@@ -172,6 +173,18 @@ function UzatmaBolumu({
     return <div className="h-20 bg-gray-50 rounded-xl animate-pulse" />;
   }
 
+  // Premium artık bu (elapsed-day tavanlı) yolu kullanmıyor — kendi
+  // dağıtılabilir uzatma havuzuyla, ihale AKTİFKEN sayfanın üstündeki
+  // "Süre Ekle" bölümünden uzatılır (bkz. SureEkleKart).
+  if (planTuru === "premium") {
+    return (
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-sm text-blue-800">
+        Premium&apos;da süre ekleme, ihale aktifken sayfanın üstündeki <strong>&quot;Süre Ekle&quot;</strong> bölümünden,
+        uzatma havuzunuzdan gün kullanılarak yapılır.
+      </div>
+    );
+  }
+
   if (planLimiti === 0) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
@@ -192,7 +205,7 @@ function UzatmaBolumu({
   return (
     <div className="border border-gray-200 rounded-xl p-4">
       <p className="text-sm text-gray-600 mb-3">
-        Planınız (<strong>{planTuru === "kurumsal" ? "Kurumsal" : planTuru === "premium" ? "Premium" : "Ücretsiz"}</strong>) toplamda en fazla{" "}
+        Planınız (<strong>Kurumsal</strong>) toplamda en fazla{" "}
         {planLimiti} gün ihale süresine izin verir. Bu ihale şu ana kadar {gecenGun} gün sürdü;
         en fazla <strong>{kalanUzatmaHakki} gün</strong> daha uzatabilirsiniz.
       </p>
@@ -341,6 +354,110 @@ function DosyaButonu({ path, etiket }: { path: string; etiket: string }) {
   );
 }
 
+// Ihale sahibi supheli/sahte bir teklifi admin'e bildirir --
+// teklif_bildirimleri INSERT RLS'i zaten yalnizca gercek ihale
+// sahibine izin verir, bu buton sadece UI'dir.
+function BildirButonu({ ihaleId, teklifId }: { ihaleId: string; teklifId: string }) {
+  const [acikMi, setAcikMi] = useState(false);
+  const [sebep, setSebep] = useState<TeklifBildirimSebebi>("dosya_bos");
+  const [aciklama, setAciklama] = useState("");
+  const [gonderiliyor, setGonderiliyor] = useState(false);
+  const [hata, setHata] = useState("");
+  const [bildirildi, setBildirildi] = useState(false);
+
+  async function gonder() {
+    setGonderiliyor(true);
+    setHata("");
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) { setGonderiliyor(false); setHata("Oturum bulunamadı."); return; }
+
+    const { error } = await supabase.from("teklif_bildirimleri").insert({
+      teklif_id: teklifId,
+      ihale_id: ihaleId,
+      bildiren_id: session.user.id,
+      sebep,
+      aciklama: aciklama.trim() || null,
+    });
+    setGonderiliyor(false);
+    if (error) { setHata("Bildirim gönderilemedi: " + error.message); return; }
+    setBildirildi(true);
+    setAcikMi(false);
+  }
+
+  if (bildirildi) {
+    return <span className="text-[11px] font-medium text-gray-400">Bildirildi ✓</span>;
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setAcikMi(true)}
+        className="text-[11px] font-semibold text-orange-600 hover:underline"
+      >
+        Bildir
+      </button>
+
+      {acikMi && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-base font-bold text-gray-900 mb-1">Teklifi Bildir</h3>
+            <p className="text-xs text-gray-500 mb-4">Bu teklifi neden şüpheli buluyorsunuz?</p>
+
+            {hata && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg p-2.5 mb-3">{hata}</div>
+            )}
+
+            <div className="flex flex-col gap-2 mb-4">
+              {SEBEP_SIRASI.map((s) => (
+                <label key={s} className="flex items-center gap-2.5 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="radio" name="bildir-sebep" value={s}
+                    checked={sebep === s}
+                    onChange={() => setSebep(s)}
+                    className="text-orange-600 w-4 h-4"
+                  />
+                  {SEBEP_ETIKETLERI[s]}
+                </label>
+              ))}
+            </div>
+
+            {sebep === "diger" && (
+              <textarea
+                rows={3}
+                placeholder="Açıklama yazın..."
+                value={aciklama}
+                onChange={(e) => setAciklama(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+              />
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={gonder}
+                disabled={gonderiliyor || (sebep === "diger" && !aciklama.trim())}
+                className="flex-1 bg-orange-600 text-white font-semibold py-2.5 rounded-xl hover:bg-orange-700 transition-colors disabled:opacity-50 text-sm"
+              >
+                {gonderiliyor ? "Gönderiliyor…" : "Bildir"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAcikMi(false)}
+                className="flex-1 border border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm"
+              >
+                Vazgeç
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 // Ihale sahibinin bitmis ihalede bir firmayi kazanan olarak secip
 // ihaleyi resmen kapatmasi. Bu tek islem: teklifin durumunu
 // kabul_edildi/reddedildi yapar (yorum yazma yetkisini acar), kazanan
@@ -444,6 +561,9 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
       teklifTuru: f.teklifTuru,
       teklifDosyasiPath: f.teklifDosyasiPath,
       alternatifProjePath: f.alternatifProjePath,
+      teklifId: f.teklifId,
+      dosyaSuphesiMi: f.dosyaSuphesiMi,
+      altProjeSuphesiMi: f.altProjeSuphesiMi,
     }));
 
     if (firmalar.length === 0) {
@@ -571,6 +691,18 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
                               {f.teklifDosyasiPath && <DosyaButonu path={f.teklifDosyasiPath} etiket="Teklif Dosyası" />}
                               {f.alternatifProjePath && <DosyaButonu path={f.alternatifProjePath} etiket="Alternatif Proje" />}
                               {!f.teklifDosyasiPath && !f.alternatifProjePath && <span className="text-xs text-gray-300">—</span>}
+                              {tamMi && (f.dosyaSuphesiMi || f.altProjeSuphesiMi) && (
+                                <p className="flex items-start gap-1 text-[11px] text-orange-600 mt-0.5 max-w-[220px]">
+                                  <span>⚠️</span>
+                                  <span>
+                                    Bu teklifin dosya içeriği diğer tekliflere göre belirgin şekilde küçüktür.
+                                    İçerik gerçekten eksik veya boşsa lütfen bildiriniz.
+                                  </span>
+                                </p>
+                              )}
+                              {tamMi && f.teklifId && (
+                                <BildirButonu ihaleId={ihale.id} teklifId={f.teklifId} />
+                              )}
                             </div>
                           </td>
                           {tamMi && (

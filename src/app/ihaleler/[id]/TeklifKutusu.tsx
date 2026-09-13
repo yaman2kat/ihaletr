@@ -54,6 +54,7 @@ export default function TeklifKutusu({ ihaleId, kategori, baslangicFiyati, durum
   const [tutar,       setTutar]       = useState("");
   const [teklifDosyasi,   setTeklifDosyasi]   = useState<File | null>(null);
   const [alternatifProje, setAlternatifProje] = useState<File | null>(null);
+  const [davetKodu,       setDavetKodu]       = useState("");
   const [yukleniyor,  setYukleniyor]  = useState(false);
   const [hata,        setHata]        = useState("");
   const [basarili,    setBasarili]    = useState(false);
@@ -161,12 +162,14 @@ export default function TeklifKutusu({ ihaleId, kategori, baslangicFiyati, durum
     }
 
     const { error } = await supabase.from("teklifler").insert({
-      ihale_id:             ihaleId,
-      kullanici_id:         kullanici.id,
-      tutar:                tutarNum,
-      teklif_turu:          paraliMi ? "nakit" : "dosya",
-      teklif_dosyasi_url:   teklifDosyasiYolu,
-      alternatif_proje_url: alternatifProjeYolu,
+      ihale_id:               ihaleId,
+      kullanici_id:           kullanici.id,
+      tutar:                  tutarNum,
+      teklif_turu:            paraliMi ? "nakit" : "dosya",
+      teklif_dosyasi_url:     teklifDosyasiYolu,
+      alternatif_proje_url:   alternatifProjeYolu,
+      teklif_dosyasi_boyut:   teklifDosyasi?.size ?? null,
+      alternatif_proje_boyut: alternatifProje?.size ?? null,
     });
 
     setYukleniyor(false);
@@ -188,12 +191,25 @@ export default function TeklifKutusu({ ihaleId, kategori, baslangicFiyati, durum
       setKalanHak((h) => Math.max(0, (h ?? 1) - 1));
     }
 
+    // Davetiye kodu girildiyse: davet edene, gerçekten teklif verildiği
+    // için (yalnızca kayıt değil) +1 teklif hakkı tanımlanır — aylık
+    // limit aşılmışsa RPC sessizce no-op olur/bildirim gönderir.
+    if (davetKodu.trim()) {
+      supabase.rpc("davet_kodu_aktivasyonu", {
+        p_davet_kodu: davetKodu.trim(),
+        p_aktivasyon_turu: "teklif",
+      }).then(({ error }) => {
+        if (error) console.warn("Davet kodu aktivasyonu başarısız:", error.message);
+      });
+    }
+
     try { localStorage.removeItem(taslakAnahtari); } catch { /* noop */ }
     setGonderilenTutar(tutarNum);
     setBasarili(true);
     setTutar("");
     setTeklifDosyasi(null);
     setAlternatifProje(null);
+    setDavetKodu("");
 
     // İhale sahibine e-posta bildirimi — akışı bloklamadan (fire-and-forget).
     fetch("/api/email/yeni-teklif", {
@@ -344,6 +360,18 @@ export default function TeklifKutusu({ ihaleId, kategori, baslangicFiyati, durum
         İhale tamamlandığında: ihale sahibi tüm dosyalarınızı ve firma bilgilerinizi görebilir.
         Diğer katılımcı müteahhitler ve Kurumsal plan sahipleri ise dosyaları firma ismi maskelenmiş şekilde görebilir.
       </p>
+
+      <div className="mb-3">
+        <label className="block text-xs text-gray-500 mb-1.5">Davetiye Kodu <span className="text-gray-400">(varsa)</span></label>
+        <input
+          type="text" placeholder="ABC123"
+          value={davetKodu} onChange={(e) => setDavetKodu(e.target.value.toUpperCase())}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+        />
+        <p className="text-xs text-gray-400 mt-1">
+          Bir müteahhitin davet kodunu kullanıyorsanız buraya girin — teklifiniz gönderildiğinde davet eden kişiye 1 teklif hakkı tanımlanır.
+        </p>
+      </div>
 
       <button
         type="submit" disabled={yukleniyor}

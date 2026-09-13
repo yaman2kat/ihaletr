@@ -30,6 +30,11 @@ export interface SonucFirma {
   teklifTuru?: "nakit" | "dosya";
   teklifDosyasiPath?: string | null;
   alternatifProjePath?: string | null;
+  /** Yalnizca ihale sahibi gorunumunde dolu -- "Bildir" akisi icin
+   * teklifin kendi id'si ve dosya boyutu supheli mi bayraklari. */
+  teklifId?: string;
+  dosyaSuphesiMi?: boolean;
+  altProjeSuphesiMi?: boolean;
 }
 
 export interface IhaleSonucVerisi {
@@ -69,13 +74,14 @@ export function formatTarih(tarih: string): string {
   });
 }
 
-// Toplam ihale süresi uzatma sınırı (gün) — ilk süre + ekstra uzatma.
-// Premium/Kurumsal sınırları PLAN_TOPLAM_MAKS_IHALE_GUNU'ndan (tek kaynak,
-// ihale-olustur ile paylaşılır) gelir; Ücretsiz planın toplam uzatma
-// sınırı ayrıca 30 gün olarak belirlenmiştir.
+// Toplam ihale süresi uzatma sınırı (gün) — yalnızca Kurumsal plan bu
+// eski (elapsed-day tavanlı) mekanizmayı kullanır. Ücretsiz planda
+// uzatma hakkı hiç yok (0). Premium artık bu yolu kullanmaz — kendi
+// dağıtılabilir "uzatma havuzu" ile, ihale detay sayfasındaki "Süre
+// Ekle" bileşeninden (SureEkleKart) uzatılır; bu yüzden burada
+// tanımlanmadı (undefined → bileşen "kilitli" gösterir).
 export const PLAN_UZATMA_LIMITI: Partial<Record<PlanTuru, number>> = {
-  ucretsiz: 30,
-  premium: PLAN_TOPLAM_MAKS_IHALE_GUNU.premium,
+  ucretsiz: 0,
   kurumsal: PLAN_TOPLAM_MAKS_IHALE_GUNU.kurumsal,
 };
 

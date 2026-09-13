@@ -18,6 +18,8 @@ export interface Belge {
   dosya_url: string;
   dosya_tipi?: string | null;
   boyut?: number | null;
+  /** Yalnizca tur='tapu' icin dolu -- SHA-256 hash, mukerrerlik kontrolu icin. */
+  dosya_hash?: string | null;
   tur: BelgeTuru;
   ihale_id?: string | null;
   danishman_id?: string | null;
@@ -154,6 +156,7 @@ export interface Kullanici {
   plan_turu?: PlanTuru;
   premium_bitis_tarihi?: string | null;
   kalan_teklif_hakki?: number;
+  uzatma_havuzu_gun?: number;
   ucretsiz_ihale_hakki_kullanildi?: boolean;
   toplam_teklif_sayisi?: number;
   davet_kodu?: string | null;
@@ -177,27 +180,40 @@ export interface Teklif {
   teklif_turu?: TeklifTuru;
   teklif_dosyasi_url?: string | null;
   alternatif_proje_url?: string | null;
+  teklif_dosyasi_boyut?: number | null;
+  alternatif_proje_boyut?: number | null;
   created_at: string;
 }
 
-export type OdulTuru = "teklif_hakki" | "sure_uzatma";
+export type TeklifBildirimSebebi = "dosya_bos" | "proje_ilgisiz" | "sartlar_eksik" | "sahte_kopya" | "diger";
+export type TeklifBildirimDurumu = "beklemede" | "incelendi" | "ikaz_gonderildi";
 
-export interface Davet {
+export interface TeklifBildirimi {
+  id: string;
+  teklif_id: string;
+  ihale_id: string;
+  bildiren_id: string;
+  sebep: TeklifBildirimSebebi;
+  aciklama: string | null;
+  durum: TeklifBildirimDurumu;
+  admin_notu: string | null;
+  ikaz_gonderildi: boolean;
+  olusturulma_tarihi: string;
+}
+
+export interface DavetKullanimLogu {
   id: string;
   davet_eden_id: string;
   davet_edilen_id: string;
-  odul_verildi: boolean;
-  odul_turu: OdulTuru | null;
-  uygulanan_ihale_id: string | null;
-  created_at: string;
-  odul_verildi_tarihi: string | null;
-  davet_edilen?: { ad_soyad: string };
+  aktivasyon_tarihi: string;
+  aktivasyon_turu: "teklif" | "ihale";
+  ay_yil: string;
 }
 
 export type BildirimTuru =
   | "yeni_teklif" | "ihale_onaylandi" | "ihale_reddedildi"
   | "ihale_otomatik_sonlandi" | "davet_odulu" | "odeme_sorunu" | "bolge_eslesmesi"
-  | "ihale_kapatildi" | "ihale_kazanildi" | "ihale_kaybedildi";
+  | "ihale_kapatildi" | "ihale_kazanildi" | "ihale_kaybedildi" | "davet_limit_asildi" | "teklif_ikazi";
 
 export interface Bildirim {
   id: string;

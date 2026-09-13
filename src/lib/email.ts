@@ -124,22 +124,6 @@ export async function gonderIhaleReddedildiEmaili(opts: {
   await gonder(opts.to, `İhaleniz reddedildi — ${opts.ihaleBaslik}`, html);
 }
 
-// 4) Davet ödülü uygulandı (davet edene)
-export async function gonderDavetOduluEmaili(opts: {
-  to: string; adSoyad: string; odulTuru: "teklif_hakki" | "sure_uzatma"; ihaleBaslik?: string;
-}) {
-  const aciklama = opts.odulTuru === "teklif_hakki"
-    ? "Davetiniz kabul edildi ve +1 teklif hakkı kazandınız."
-    : `Davetiniz kabul edildi${opts.ihaleBaslik ? `, "${opts.ihaleBaslik}" ihalenizin` : " ve bir ihalenizin"} süresi 15 gün uzatıldı.`;
-  const html = sablon({
-    baslik: "Davet ödülünüz uygulandı",
-    govdeHtml: `<p>Merhaba ${opts.adSoyad},</p><p>${aciklama}</p>`,
-    ctaMetin: "Panele Git",
-    ctaLink: `${siteUrl()}/panel`,
-  });
-  await gonder(opts.to, "Davet ödülünüz uygulandı 🎉", html);
-}
-
 // 5) Bölge eşleşmesi (çalıştığı ilde yeni ihale — müteahhide)
 export async function gonderBolgeEslesmesiEmaili(opts: {
   to: string; adSoyad: string; sehir: string; ilce?: string | null; ihaleBaslik: string; ihaleId: string;
@@ -169,4 +153,19 @@ export async function gonderSureUyarisiEmaili(opts: {
     ctaLink: `${siteUrl()}/ihaleler/${opts.ihaleId}`,
   });
   await gonder(opts.to, `Süre dolmak üzere — ${opts.ihaleBaslik}`, html);
+}
+
+// 7) Şüpheli/sahte teklif ikazı (admin panelinden, müteahhide)
+export async function gonderTeklifIkaziEmaili(opts: {
+  to: string; adSoyad: string; ihaleBaslik: string; mesaj: string;
+}) {
+  const html = sablon({
+    baslik: "Teklifinizle ilgili bir ikaz aldınız",
+    govdeHtml: `
+      <p>Merhaba ${opts.adSoyad},</p>
+      <p>${opts.mesaj}</p>`,
+    ctaMetin: "İhaleyi Görüntüle",
+    ctaLink: `${siteUrl()}/panel`,
+  });
+  await gonder(opts.to, `Teklifinizle ilgili bir ikaz — ${opts.ihaleBaslik}`, html);
 }

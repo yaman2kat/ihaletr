@@ -14,6 +14,8 @@ const TUR_IKON: Record<string, string> = {
   ihale_reddedildi: "⛔",
   ihale_otomatik_sonlandi: "⏱️",
   davet_odulu: "🎁",
+  davet_limit_asildi: "🚫",
+  teklif_ikazi: "⚠️",
   odeme_sorunu: "⚠️",
   bolge_eslesmesi: "📍",
   ihale_kapatildi: "🔒",

@@ -13,6 +13,8 @@ const TUR_IKON: Record<string, string> = {
   ihale_reddedildi: "⛔",
   ihale_otomatik_sonlandi: "⏱️",
   davet_odulu: "🎁",
+  davet_limit_asildi: "🚫",
+  teklif_ikazi: "⚠️",
   odeme_sorunu: "⚠️",
   bolge_eslesmesi: "📍",
   ihale_kapatildi: "🔒",
@@ -23,9 +25,9 @@ const TUR_IKON: Record<string, string> = {
 type Kategori = "tumu" | "teklif" | "ihale" | "davet" | "odeme";
 
 const KATEGORI_TURLERI: Record<Exclude<Kategori, "tumu">, BildirimTuru[]> = {
-  teklif: ["yeni_teklif"],
+  teklif: ["yeni_teklif", "teklif_ikazi"],
   ihale: ["ihale_onaylandi", "ihale_reddedildi", "ihale_otomatik_sonlandi", "bolge_eslesmesi", "ihale_kapatildi", "ihale_kazanildi", "ihale_kaybedildi"],
-  davet: ["davet_odulu"],
+  davet: ["davet_odulu", "davet_limit_asildi"],
   odeme: ["odeme_sorunu"],
 };
 

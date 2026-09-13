@@ -23,6 +23,31 @@ export interface TeklifFirma {
   teklifTuru?: "nakit" | "dosya";
   teklifDosyasiPath?: string | null;
   alternatifProjePath?: string | null;
+  /** Yalnizca "tam" (ihale sahibi) icin dolu -- teklifin kendi id'si,
+   * "Bildir" akisinda teklif_bildirimleri.teklif_id icin gerekir. */
+  teklifId?: string;
+  /** Bu ihaledeki digerlerine gore dosya boyutu supheli derecede kucuk mu
+   * (ortalamanin %25'inden az) -- yalnizca "tam" erisimde hesaplanir,
+   * gizlilik geregi maskeli/kilitli goruntude hic boyut bilgisi yok. */
+  dosyaSuphesiMi?: boolean;
+  altProjeSuphesiMi?: boolean;
+}
+
+// Bir grup dosya boyutu icinde, ortalamanin %25'inden az olanlari
+// "supheli" isaretler. En az 2 ornek yoksa kiyaslama anlamsizdir, hic
+// isaretlenmez.
+const SUPHE_ESIK_ORANI = 0.25;
+function supheliIndeksSeti(boyutlar: (number | null | undefined)[]): Set<number> {
+  const gecerli = boyutlar
+    .map((b, i) => [i, b] as const)
+    .filter((x): x is [number, number] => typeof x[1] === "number" && x[1] > 0);
+  const supheliler = new Set<number>();
+  if (gecerli.length < 2) return supheliler;
+  const ortalama = gecerli.reduce((s, [, b]) => s + b, 0) / gecerli.length;
+  for (const [i, b] of gecerli) {
+    if (b < ortalama * SUPHE_ESIK_ORANI) supheliler.add(i);
+  }
+  return supheliler;
 }
 
 interface Sonuc {
@@ -67,7 +92,7 @@ export function useGercekTeklifErisimi(
       if (uid && olusturanId && uid === olusturanId) {
         const { data: teklifler } = await supabase
           .from("teklifler")
-          .select("kullanici_id, tutar, durum, teklif_turu, teklif_dosyasi_url, alternatif_proje_url")
+          .select("id, kullanici_id, tutar, durum, teklif_turu, teklif_dosyasi_url, alternatif_proje_url, teklif_dosyasi_boyut, alternatif_proje_boyut")
           .eq("ihale_id", ihaleId)
           .order("tutar", { ascending: true, nullsFirst: false });
 
@@ -91,7 +116,10 @@ export function useGercekTeklifErisimi(
           yorumHarita.set(y.muteahhit_id, liste);
         }
 
-        const firmalar: TeklifFirma[] = (teklifler ?? []).map((t) => {
+        const supheliDosyalar = supheliIndeksSeti((teklifler ?? []).map((t) => t.teklif_dosyasi_boyut));
+        const supheliAltProjeler = supheliIndeksSeti((teklifler ?? []).map((t) => t.alternatif_proje_boyut));
+
+        const firmalar: TeklifFirma[] = (teklifler ?? []).map((t, i) => {
           const puanlar = yorumHarita.get(t.kullanici_id) ?? [];
           return {
             kullanici_id: t.kullanici_id,
@@ -105,6 +133,9 @@ export function useGercekTeklifErisimi(
             teklifTuru: t.teklif_turu,
             teklifDosyasiPath: t.teklif_dosyasi_url,
             alternatifProjePath: t.alternatif_proje_url,
+            teklifId: t.id,
+            dosyaSuphesiMi: supheliDosyalar.has(i),
+            altProjeSuphesiMi: supheliAltProjeler.has(i),
           };
         });
 
