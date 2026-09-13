@@ -195,8 +195,17 @@ CREATE TRIGGER trg_kullanici_kisitli_sutun_kontrol
 -- formdaki "Davetiye Kodu" kutusu üzerinden tetiklenir (bkz. bölüm 10,
 -- davet_kodu_aktivasyonu). Yeni hesaba ücretsiz teklif hakkı verilmez
 -- (kalan_teklif_hakki = 0).
+--
+-- SET search_path = public ZORUNLU: bu fonksiyon auth.users uzerinde
+-- AFTER INSERT trigger'i olarak supabase_auth_admin roluyle calisir;
+-- bu rolun search_path'i "public" semasini icermez. Govde icinde sema
+-- onsuz kullanilan "hesap_turu_tipi" enum tipi bu ayar olmadan
+-- COZUMLENEMEZ ve her yeni kayitta "Database error creating new user"
+-- hatasi verir (canli ortamda bu hatayla dogrulandi -- bkz.
+-- search_path_fix.sql, bu sorunu daha once bir kez cozmustu ama
+-- schema.sql'e hic yansitilmamisti).
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_hesap_turu hesap_turu_tipi;
 BEGIN
@@ -1270,7 +1279,7 @@ CREATE OR REPLACE FUNCTION public.oauth_kayit_tamamla(
   p_hesap_turu hesap_turu_tipi DEFAULT NULL,
   p_ref_kodu   text DEFAULT NULL
 )
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   IF p_hesap_turu IS NOT NULL THEN
     UPDATE public.kullanicilar SET hesap_turu = p_hesap_turu WHERE id = auth.uid();
@@ -1377,11 +1386,32 @@ CREATE POLICY "Bildiren ve admin gorebilir"
 -- Yalnizca GERCEK ihale sahibi, KENDI ihalesindeki bir teklifi
 -- bildirebilir -- bildiren_id sahtekarlik yapip baskasi adina ya da
 -- kendisine ait olmayan bir ihale icin bildirim acamaz.
+--
+-- Sahiplik kontrolu, is_admin() ile ayni gerekce yuzunden SECURITY
+-- DEFINER bir yardimci fonksiyona tasindi: RLS politikasi icinde RLS'e
+-- tabi baska tablolari (teklifler + ihaleler) sorgulayan ic ice
+-- subquery'ler (once "ayni adli sutunu tablo adiyla niteleme", sonra
+-- "skaler alt sorgu" denendi) canli testte GERCEK ihale sahibi icin
+-- bile guvenilmez sekilde RLS ihlaline yol acti; SECURITY DEFINER
+-- fonksiyon RLS'i tamamen atlayarak bunu kesin sekilde cozer.
+CREATE OR REPLACE FUNCTION public.teklif_ihale_sahibi_mi(p_teklif_id uuid, p_ihale_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.teklifler t
+    JOIN public.ihaleler i ON i.id = t.ihale_id
+    WHERE t.id = p_teklif_id
+      AND i.id = p_ihale_id
+      AND i.olusturan_id = auth.uid()
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.teklif_ihale_sahibi_mi(uuid, uuid) TO authenticated;
+
 CREATE POLICY "Ihale sahibi kendi ihalesi icin teklif bildirebilir"
   ON public.teklif_bildirimleri FOR INSERT WITH CHECK (
     auth.uid() = bildiren_id
-    AND EXISTS (SELECT 1 FROM public.ihaleler WHERE id = ihale_id AND olusturan_id = auth.uid())
-    AND EXISTS (SELECT 1 FROM public.teklifler WHERE id = teklif_id AND ihale_id = teklif_bildirimleri.ihale_id)
+    AND public.teklif_ihale_sahibi_mi(teklif_id, ihale_id)
   );
 
 -- admin_notu/durum/ikaz_gonderildi yalnizca admin tarafindan guncellenir.
