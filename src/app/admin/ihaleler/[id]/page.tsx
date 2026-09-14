@@ -200,13 +200,28 @@ export default function AdminIhaleIncele() {
     setIslemYapiliyor(true);
     setHata("");
     const supabase = createClient();
+    // durum='beklemede' iken onaylanan ihale burada 'aktif'e gecer --
+    // bu adim olmadan ihale sonsuza kadar 'beklemede' kalip genel
+    // listede/detay sayfasinda yanlislikla "Beklemede" gorunmeye devam
+    // ederdi (durum, ihale-olustur'da hep 'beklemede' ile baslar).
+    // Zaten aktif/tamamlandi/iptal olan bir ihalenin durumunu
+    // etkilememesi icin yalnizca hala 'beklemede' oldugunda degistirilir.
     const { error } = await supabase
       .from("ihaleler")
-      .update({ inceleme_durumu: "onaylandi", red_sebebi: null })
+      .update({
+        inceleme_durumu: "onaylandi",
+        red_sebebi: null,
+        ...(ihale.durum === "beklemede" ? { durum: "aktif" } : {}),
+      })
       .eq("id", ihale.id);
     setIslemYapiliyor(false);
     if (error) { setHata("Onaylanamadı: " + error.message); return; }
-    setIhale((i) => (i ? { ...i, inceleme_durumu: "onaylandi", red_sebebi: null } : i));
+    setIhale((i) => (i ? {
+      ...i,
+      inceleme_durumu: "onaylandi",
+      red_sebebi: null,
+      durum: i.durum === "beklemede" ? "aktif" : i.durum,
+    } : i));
     setRedFormuAcik(false);
 
     fetch("/api/email/ihale-durumu", {

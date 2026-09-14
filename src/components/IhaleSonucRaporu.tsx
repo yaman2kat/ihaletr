@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
@@ -16,7 +16,7 @@ import {
 } from "recharts";
 import { createClient } from "@/lib/supabase/client";
 import { mockMuteahhitYorumlar, type MockTeklif } from "@/lib/mock-data";
-import type { PlanTuru, TeklifBildirimSebebi } from "@/lib/types";
+import type { TeklifBildirimSebebi } from "@/lib/types";
 import { SEBEP_ETIKETLERI, SEBEP_SIRASI } from "@/lib/teklif-ikaz";
 import { useTeklifRaporuErisimi } from "@/hooks/useTeklifRaporuErisimi";
 import { useGercekTeklifErisimi } from "@/hooks/useGercekTeklifErisimi";
@@ -25,11 +25,7 @@ import {
   type SonucFirma,
   ozetIstatistikHesapla,
   formatPara,
-  formatTarih,
   gercekIhaleIdMi,
-  PLAN_UZATMA_LIMITI,
-  gunFarki,
-  tarihiGunEkleyerekUzat,
 } from "@/lib/ihale-sonuc";
 import { ihaleSonucExcelOlustur } from "@/lib/ihale-sonuc-excel";
 import { ihaleSonucWordOlustur } from "@/lib/ihale-sonuc-word";
@@ -89,149 +85,6 @@ function IndirButonu({ etiket, onIndir }: { etiket: string; onIndir: () => Promi
     >
       {yukleniyor ? "…" : hata ? "Hata, tekrar dene" : etiket}
     </button>
-  );
-}
-
-function UzatmaBolumu({
-  ihaleId, baslangicTarihi, bitisTarihi,
-}: { ihaleId: string; baslangicTarihi: string; bitisTarihi: string }) {
-  const [acikMi, setAcikMi] = useState(false);
-  const [planTuru, setPlanTuru] = useState<PlanTuru | null | undefined>(undefined);
-  const [gun, setGun] = useState("");
-  const [gonderiliyor, setGonderiliyor] = useState(false);
-  const [hata, setHata] = useState("");
-  const [basariliTarih, setBasariliTarih] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!acikMi) return;
-    const supabase = createClient();
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) { setPlanTuru(null); return; }
-      const { data } = await supabase
-        .from("kullanicilar")
-        .select("plan_turu")
-        .eq("id", session.user.id)
-        .single();
-      setPlanTuru((data?.plan_turu as PlanTuru | undefined) ?? null);
-    });
-  }, [acikMi]);
-
-  const gecenGun = gunFarki(baslangicTarihi, bitisTarihi);
-  const planLimiti = planTuru ? PLAN_UZATMA_LIMITI[planTuru] ?? 0 : 0;
-  const kalanUzatmaHakki = Math.max(0, planLimiti - gecenGun);
-
-  async function uzat() {
-    setHata("");
-    const eklenecekGun = Number(gun);
-    if (!eklenecekGun || eklenecekGun <= 0) { setHata("Geçerli bir gün sayısı girin."); return; }
-    if (eklenecekGun > kalanUzatmaHakki) { setHata(`En fazla ${kalanUzatmaHakki} gün uzatabilirsiniz.`); return; }
-
-    setGonderiliyor(true);
-    const yeniBitisTarihi = tarihiGunEkleyerekUzat(bitisTarihi, eklenecekGun);
-    const supabase = createClient();
-    // .eq("durum", "aktif") ile eslesme kontrolu: ihale, siz bu formu
-    // doldururken pg_cron tarafindan zaten otomatik sonlandirilmis olabilir
-    // — bu durumda uzatma islemi sessizce tutarsiz bir duruma (tamamlandi +
-    // gelecekteki bir bitis_tarihi) yol acmadan reddedilir.
-    const { data, error } = await supabase
-      .from("ihaleler")
-      .update({ bitis_tarihi: yeniBitisTarihi })
-      .eq("id", ihaleId)
-      .eq("durum", "aktif")
-      .select("id");
-    setGonderiliyor(false);
-
-    if (error) { setHata("İhale uzatılamadı: " + error.message); return; }
-    if (!data || data.length === 0) {
-      setHata("Bu ihale artık aktif değil — süresi dolup otomatik sonlandırılmış olabilir, uzatılamaz.");
-      return;
-    }
-    setBasariliTarih(yeniBitisTarihi);
-  }
-
-  if (!acikMi) {
-    return (
-      <button
-        type="button"
-        onClick={() => setAcikMi(true)}
-        className="w-full flex items-center justify-center gap-2 border border-gray-200 text-gray-700 font-medium py-2.5 rounded-xl hover:bg-gray-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
-      >
-        İhaleyi Uzat
-      </button>
-    );
-  }
-
-  if (basariliTarih) {
-    return (
-      <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center text-sm text-green-700">
-        İhale başarıyla uzatıldı. Yeni son teklif tarihi: <strong>{formatTarih(basariliTarih)}</strong>
-      </div>
-    );
-  }
-
-  if (planTuru === undefined) {
-    return <div className="h-20 bg-gray-50 rounded-xl animate-pulse" />;
-  }
-
-  // Premium artık bu (elapsed-day tavanlı) yolu kullanmıyor — kendi
-  // dağıtılabilir uzatma havuzuyla, ihale AKTİFKEN sayfanın üstündeki
-  // "Süre Ekle" bölümünden uzatılır (bkz. SureEkleKart).
-  if (planTuru === "premium") {
-    return (
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-sm text-blue-800">
-        Premium&apos;da süre ekleme, ihale aktifken sayfanın üstündeki <strong>&quot;Süre Ekle&quot;</strong> bölümünden,
-        uzatma havuzunuzdan gün kullanılarak yapılır.
-      </div>
-    );
-  }
-
-  if (planLimiti === 0) {
-    return (
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-        <p className="text-sm text-amber-800 mb-2">İhale uzatma, Premium ve Kurumsal planlarda kullanılabilir.</p>
-        <Link href="/premium" className="text-sm font-semibold text-amber-700 hover:underline">Plana Geç →</Link>
-      </div>
-    );
-  }
-
-  if (kalanUzatmaHakki <= 0) {
-    return (
-      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center text-sm text-gray-500">
-        Bu ihale, planınızın izin verdiği toplam {planLimiti} günlük süreye zaten ulaştı.
-      </div>
-    );
-  }
-
-  return (
-    <div className="border border-gray-200 rounded-xl p-4">
-      <p className="text-sm text-gray-600 mb-3">
-        Planınız (<strong>Kurumsal</strong>) toplamda en fazla{" "}
-        {planLimiti} gün ihale süresine izin verir. Bu ihale şu ana kadar {gecenGun} gün sürdü;
-        en fazla <strong>{kalanUzatmaHakki} gün</strong> daha uzatabilirsiniz.
-      </p>
-      {hata && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg p-2.5 mb-3">{hata}</div>
-      )}
-      <div className="flex gap-2">
-        <input
-          type="number"
-          min={1}
-          max={kalanUzatmaHakki}
-          value={gun}
-          onChange={(e) => setGun(e.target.value)}
-          placeholder={`1-${kalanUzatmaHakki} gün`}
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button
-          type="button"
-          disabled={gonderiliyor}
-          onClick={uzat}
-          className="bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-blue-800 disabled:opacity-50 transition-colors"
-        >
-          {gonderiliyor ? "Uzatılıyor..." : "Uzat"}
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -597,7 +450,6 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
 
     const ozet = ozetIstatistikHesapla(firmalar);
     const siraliFirmalar = [...firmalar].sort((a, b) => (a.tutar ?? Infinity) - (b.tutar ?? Infinity));
-    const uzatmaGosterilsinMi = tamMi && !kazananKullaniciId && firmalar.length < 7;
 
     return (
       <>
@@ -761,15 +613,6 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
                     </div>
                   </div>
                 )}
-
-                {/* İhaleyi Uzat — sadece sahibi, kazanan secilmemis ve 7'den az firma teklif verdiyse */}
-                {uzatmaGosterilsinMi && (
-                  <UzatmaBolumu
-                    ihaleId={ihale.id}
-                    baslangicTarihi={ihale.baslangic_tarihi}
-                    bitisTarihi={ihale.bitis_tarihi}
-                  />
-                )}
               </div>
             </div>
           </div>,
@@ -812,7 +655,6 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
 
   const ozet = ozetIstatistikHesapla(firmalar);
   const siraliFirmalar = [...firmalar].sort((a, b) => (a.tutar ?? Infinity) - (b.tutar ?? Infinity));
-  const uzatmaGosterilsinMi = firmalar.length < 7;
 
   if (mockErisim === "yukleniyor") {
     return <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />;
@@ -925,15 +767,6 @@ export default function IhaleSonucRaporu({ ihale, teklifler, olusturanId }: Prop
                     <p className="font-bold text-blue-700">{formatPara(Math.round(ozet.ortalama))}</p>
                   </div>
                 </div>
-              )}
-
-              {/* İhaleyi Uzat — sadece 7'den az firma teklif verdiyse */}
-              {uzatmaGosterilsinMi && (
-                <UzatmaBolumu
-                  ihaleId={ihale.id}
-                  baslangicTarihi={ihale.baslangic_tarihi}
-                  bitisTarihi={ihale.bitis_tarihi}
-                />
               )}
             </div>
           </div>

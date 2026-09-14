@@ -28,9 +28,12 @@ export function gunEkle(tarihIso: string, gun: number) {
   return d.toISOString().slice(0, 10);
 }
 
-export const DURUM_BADGE: Record<IhaleDurumu, { etiket: string; cls: string }> = {
+// "beklemede" (durum) kasitli olarak burada yok -- ihale sahibinin
+// panelinde bu durum icin ayrica gosterilen "İnceleme Aşamasında"
+// rozeti (inceleme_durumu bazli) yeterlidir, "Beklemede" yazisi hicbir
+// yerde gosterilmez (bkz. ArsaSahibiPanel.tsx > rozetHesapla).
+export const DURUM_BADGE: Partial<Record<IhaleDurumu, { etiket: string; cls: string }>> = {
   aktif:       { etiket: "Aktif",       cls: "bg-green-100 text-green-700" },
-  beklemede:   { etiket: "Beklemede",   cls: "bg-yellow-100 text-yellow-700" },
   tamamlandi:  { etiket: "Tamamlandı",  cls: "bg-gray-100 text-gray-600" },
   iptal:       { etiket: "İptal",       cls: "bg-red-100 text-red-600" },
 };

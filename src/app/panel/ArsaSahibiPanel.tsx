@@ -39,11 +39,16 @@ function ihaleBitmis(ihale: Ihale): boolean {
 // sahibinin kendi paneli) gosterilir -- genel /ihaleler listesinde
 // (bkz. IhaleKarti.tsx) bu rozet hic gorunmez, onun yerine notr bir
 // "Süresi Doldu" etiketi kullanilir.
-function rozetHesapla(ihale: Ihale): { etiket: string; cls: string } {
+//
+// durum='beklemede' icin de kasitli olarak null doner -- "Beklemede"
+// yazisi hicbir yerde gosterilmez, onay bekleyen durumu zaten ayrica
+// "İnceleme Aşamasında" rozetiyle (inceleme_durumu bazli, asagida)
+// gosteriliyor.
+function rozetHesapla(ihale: Ihale): { etiket: string; cls: string } | null {
   if (ihaleBitmis(ihale) && !ihale.secilen_firma_id) {
     return { etiket: "Karar Bekleniyor", cls: "bg-amber-100 text-amber-700" };
   }
-  return DURUM_BADGE[ihale.durum];
+  return DURUM_BADGE[ihale.durum] ?? null;
 }
 
 export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
@@ -278,9 +283,11 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                           >
                             {ihale.baslik}
                           </Link>
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${badge.cls}`}>
-                            {badge.etiket}
-                          </span>
+                          {badge && (
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${badge.cls}`}>
+                              {badge.etiket}
+                            </span>
+                          )}
                           {ihale.inceleme_durumu === "reddedildi" && (
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                               ⚠ Reddedildi
@@ -331,13 +338,12 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                         </div>
                       </div>
 
-                      <div className="hidden sm:block text-right flex-shrink-0">
-                        <p className="text-xs text-gray-400 mb-0.5">Başlangıç</p>
-                        <p className="text-sm font-bold text-gray-900">{paraBirim(ihale.baslangic_fiyati)}</p>
-                        {ihaleBitmis(ihale) && ihale.mevcut_teklif && (
-                          <p className="text-xs text-green-600 font-medium">{paraBirim(ihale.mevcut_teklif)} en düşük</p>
-                        )}
-                      </div>
+                      {ihaleBitmis(ihale) && ihale.mevcut_teklif && (
+                        <div className="hidden sm:block text-right flex-shrink-0">
+                          <p className="text-sm font-bold text-green-600">{paraBirim(ihale.mevcut_teklif)}</p>
+                          <p className="text-xs text-gray-400">en düşük teklif</p>
+                        </div>
+                      )}
 
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                         <div className="flex items-center gap-2">

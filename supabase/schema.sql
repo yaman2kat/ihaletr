@@ -823,6 +823,14 @@ GRANT EXECUTE ON FUNCTION public.premium_havuz_ekle(uuid) TO service_role;
 -- İhale sahibi, Premium uzatma havuzundan gün düşerek AKTİF bir
 -- ihalesinin süresini uzatır. Sahiplik + aktiflik kontrolü ve havuz
 -- yeterliliği burada, SECURITY DEFINER içinde garanti edilir.
+--
+-- bitis_tarihi >= CURRENT_DATE kontrolu ZORUNLU: pg_cron'un otomatik
+-- sonlandirma isi suresi dolmus bir ihaleyi ancak 2 gun SONRA
+-- 'tamamlandi' yapiyor (bkz. ihale_otomatik_sonlandir()); bu pencerede
+-- durum hala 'aktif' oldugundan, bu kontrol olmadan suresi zaten
+-- dolmus bir ihale RPC'ye dogrudan cagriyla uzatilabilirdi -- "ihale
+-- bittikten sonra hicbir sekilde uzatma yapilamaz" kuralini ihlal
+-- ederdi (canli testte bulundu).
 CREATE OR REPLACE FUNCTION public.ihale_suresini_uzat(
   p_ihale_id uuid,
   p_gun      integer
@@ -841,9 +849,13 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
-    SELECT 1 FROM public.ihaleler WHERE id = p_ihale_id AND olusturan_id = auth.uid() AND durum = 'aktif'
+    SELECT 1 FROM public.ihaleler
+    WHERE id = p_ihale_id
+      AND olusturan_id = auth.uid()
+      AND durum = 'aktif'
+      AND bitis_tarihi >= CURRENT_DATE
   ) THEN
-    RAISE EXCEPTION 'Bu ihale size ait aktif bir ihale degil.';
+    RAISE EXCEPTION 'Bu ihale size ait aktif bir ihale degil ya da suresi zaten dolmus.';
   END IF;
 
   SELECT uzatma_havuzu_gun INTO v_havuz FROM public.kullanicilar WHERE id = auth.uid() FOR UPDATE;

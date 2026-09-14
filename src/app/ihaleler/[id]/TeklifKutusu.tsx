@@ -10,7 +10,6 @@ import type { User } from "@supabase/supabase-js";
 interface Props {
   ihaleId: string;
   kategori: string;
-  baslangicFiyati: number;
   durum: string;
   kalanGun: number;
 }
@@ -43,7 +42,7 @@ function hakRenk(hak: number): string {
   return "text-green-600";
 }
 
-export default function TeklifKutusu({ ihaleId, kategori, baslangicFiyati, durum, kalanGun }: Props) {
+export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Props) {
   const router = useRouter();
   const taslakAnahtari = `teklif-taslak-${ihaleId}`;
   const paraliMi = NAKIT_KATEGORILER.has(kategori);
@@ -316,11 +315,10 @@ export default function TeklifKutusu({ ihaleId, kategori, baslangicFiyati, durum
         <div className="mb-3">
           <label className="block text-xs text-gray-500 mb-1.5">Teklif Tutarınız (₺)</label>
           <input
-            type="number" required min="1" placeholder={String(baslangicFiyati)}
+            type="number" required min="1" placeholder="Teklif tutarınızı girin"
             value={tutar} onChange={(e) => setTutar(e.target.value)}
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <p className="text-xs text-gray-400 mt-1">Başlangıç: {formatPara(baslangicFiyati)}</p>
         </div>
       )}
 

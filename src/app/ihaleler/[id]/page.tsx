@@ -12,28 +12,23 @@ import AdaParselButon from "@/components/AdaParselButon";
 import IhaleSonucRaporu from "@/components/IhaleSonucRaporu";
 import SureEkleKart from "./SureEkleKart";
 
-function formatPara(tutar: number): string {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency", currency: "TRY", minimumFractionDigits: 0,
-  }).format(tutar);
-}
-
 function formatTarih(tarih: string): string {
   return new Date(tarih).toLocaleDateString("tr-TR", {
     day: "numeric", month: "long", year: "numeric",
   });
 }
 
+// "beklemede" kasitli olarak burada yok -- admin onayi bekleyen bir
+// ihalenin "Beklemede" yazisi bu sayfada hic gosterilmez (bkz.
+// asagidaki render, badge sadece bu map'te karsiligi varsa cizilir).
 const durumRenk: Record<string, string> = {
   aktif:      "bg-green-100 text-green-800",
-  beklemede:  "bg-yellow-100 text-yellow-800",
   tamamlandi: "bg-gray-100 text-gray-700",
   iptal:      "bg-red-100 text-red-800",
 };
 
 const durumEtiket: Record<string, string> = {
   aktif:      "Aktif",
-  beklemede:  "Beklemede",
   tamamlandi: "Tamamlandı",
   iptal:      "İptal",
 };
@@ -130,9 +125,11 @@ export default async function IhaleDetay({
           {/* Başlık Kartı */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              <span className={`text-sm font-semibold px-3 py-1 rounded-full ${durumRenk[ihale.durum]}`}>
-                {durumEtiket[ihale.durum]}
-              </span>
+              {durumEtiket[ihale.durum] && (
+                <span className={`text-sm font-semibold px-3 py-1 rounded-full ${durumRenk[ihale.durum]}`}>
+                  {durumEtiket[ihale.durum]}
+                </span>
+              )}
               <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
                 {ihale.kategori}
               </span>
@@ -316,30 +313,24 @@ export default async function IhaleDetay({
               <GeriSayim bitisTarihi={ihale.bitis_tarihi} />
             )}
 
-            {/* Fiyat Bilgisi */}
+            {/* Teklif Ver */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                Fiyat Bilgisi
-              </p>
-              <div className="flex flex-col gap-3 mb-5">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-400 mb-1">Başlangıç Fiyatı</p>
-                  <p className="text-xl font-semibold text-gray-700">{formatPara(ihale.baslangic_fiyati)}</p>
-                </div>
-              </div>
-
-              {/* Teklif Ver */}
               <TeklifKutusu
                 ihaleId={ihale.id}
                 kategori={ihale.kategori}
-                baslangicFiyati={ihale.baslangic_fiyati}
                 durum={ihale.durum}
                 kalanGun={kalanGun}
               />
             </div>
 
-            {/* Süre Ekle (Premium, aktif ihale sahibi) */}
-            <SureEkleKart ihaleId={ihale.id} olusturanId={ihale.olusturan_id} durum={ihale.durum} />
+            {/* Süre Ekle / İhaleyi Uzat (yalnızca sahibi, yalnızca hâlâ aktifken) */}
+            <SureEkleKart
+              ihaleId={ihale.id}
+              olusturanId={ihale.olusturan_id}
+              durum={ihale.durum}
+              baslangicTarihi={ihale.baslangic_tarihi}
+              bitisTarihi={ihale.bitis_tarihi}
+            />
 
             {/* İhale Sonucu (süresi dolmuş/tamamlanmış ihaleler) */}
             {sonucGosterilsinMi && (

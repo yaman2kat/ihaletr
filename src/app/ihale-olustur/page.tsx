@@ -81,7 +81,7 @@ export default function IhaleOlustur() {
   const [form, setForm] = useState({
     baslik: "", kategori: "", aciklama: "",
     kurum: "", sehir: "", ilce: "", mahalle: "", caddeSokak: "", adaNo: "", parselNo: "", yuzolcumuM2: "",
-    baslangicFiyati: "", bitisTarihi: "",
+    bitisTarihi: "",
     yapiInsaatRuhsati: "" as "" | "var" | "yok",
     proje: "" as "" | "var" | "yok",
     mulkiyetDurumu: "" as "" | MulkiyetDurumu,
@@ -175,7 +175,6 @@ export default function IhaleOlustur() {
     if (!form.adaNo.trim())           eksik.push("Ada No");
     if (!form.parselNo.trim())        eksik.push("Parsel No");
     if (!form.yuzolcumuM2)            eksik.push("Yüzölçümü (m²)");
-    if (!form.baslangicFiyati)        eksik.push("Başlangıç Fiyatı");
     if (!form.bitisTarihi)            eksik.push("Son Teklif Tarihi");
     if (!form.yapiInsaatRuhsati)      eksik.push("Yapı İnşaat Ruhsatı");
     if (!form.proje)                  eksik.push("Proje");
@@ -245,7 +244,11 @@ export default function IhaleOlustur() {
         ada_no:           form.adaNo,
         parsel_no:        form.parselNo,
         yuzolcumu_m2:     Number(form.yuzolcumuM2),
-        baslangic_fiyati: Number(form.baslangicFiyati),
+        // Platform kapali zarf sistemiyle calisir; arsa sahibi bir
+        // baslangic fiyati belirlemez. Kolon DB'de NOT NULL + CHECK(>0)
+        // oldugu icin (kaldirilmadi, sadece kullanimdan kaldirildi)
+        // sabit bir yer tutucu deger gonderilir.
+        baslangic_fiyati: 1,
         baslangic_tarihi: new Date().toISOString().split("T")[0],
         bitis_tarihi:           form.bitisTarihi,
         durum:                  "beklemede",
@@ -666,39 +669,27 @@ export default function IhaleOlustur() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Başlangıç Fiyatı (₺) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number" required min="1" placeholder="5000000"
-                value={form.baslangicFiyati} onChange={(e) => guncelle("baslangicFiyati", e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Son Teklif Tarihi <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date" required
-                min={new Date().toISOString().split("T")[0]}
-                max={maxBitisTarihi(planTuru)}
-                value={form.bitisTarihi} onChange={(e) => guncelle("bitisTarihi", e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-amber-600 mt-1">
-                {planTuru === "ucretsiz"
-                  ? `Ücretsiz planda en fazla ${PLAN_ILK_IHALE_GUNU.ucretsiz} gün seçilebilir.`
-                  : `${planTuru === "kurumsal" ? "Kurumsal" : "Premium"} planda en fazla ${
-                      PLAN_ILK_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_ILK_IHALE_GUNU.ucretsiz
-                    } gün seçilebilir.`}
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                İdeal ihale süresi, başlangıç tarihinden itibaren 20-30 gün arasıdır.
-              </p>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Son Teklif Tarihi <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date" required
+              min={new Date().toISOString().split("T")[0]}
+              max={maxBitisTarihi(planTuru)}
+              value={form.bitisTarihi} onChange={(e) => guncelle("bitisTarihi", e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-amber-600 mt-1">
+              {planTuru === "ucretsiz"
+                ? `Ücretsiz planda en fazla ${PLAN_ILK_IHALE_GUNU.ucretsiz} gün seçilebilir.`
+                : `${planTuru === "kurumsal" ? "Kurumsal" : "Premium"} planda en fazla ${
+                    PLAN_ILK_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_ILK_IHALE_GUNU.ucretsiz
+                  } gün seçilebilir.`}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              İdeal ihale süresi, başlangıç tarihinden itibaren 20-30 gün arasıdır.
+            </p>
           </div>
 
           {/* Mülkiyet Durumu */}
