@@ -116,6 +116,25 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
     yukle();
   }, [userId]);
 
+  // Admin onayı/reddi (durum/inceleme_durumu) anında yansısın diye --
+  // sayfa yenilemeden, sadece kendi ihalelerindeki değişiklikleri dinler.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`arsa-sahibi-ihaleler-${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "ihaleler", filter: `olusturan_id=eq.${userId}` },
+        (payload) => {
+          const guncel = payload.new as Ihale;
+          setIhaleler((liste) => liste.map((i) => (i.id === guncel.id ? guncel : i)));
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   async function handleSil(id: string) {
     if (!confirm("Bu ihaleyi silmek istediğinizden emin misiniz?")) return;
     setSiliniyor(id);
@@ -378,10 +397,22 @@ export default function ArsaSahibiPanel({ userId }: ArsaSahibiPanelProps) {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
-                        <div>
+                        <div className="flex-1">
                           <p className="text-xs font-semibold text-red-800 mb-0.5">İhaleniz reddedildi</p>
-                          <p className="text-xs text-red-700">{ihale.red_sebebi}</p>
+                          <p className="text-xs text-red-700 mb-2">{ihale.red_sebebi}</p>
+                          <Link
+                            href={`/ihaleler/${ihale.id}/duzenle`}
+                            className="inline-block text-xs font-bold text-red-700 hover:underline"
+                          >
+                            Düzenle ve Tekrar Gönder →
+                          </Link>
                         </div>
+                      </div>
+                    )}
+
+                    {ihale.durum === "aktif" && ihale.sonuc_aciklama_tarihi && (
+                      <div className="mt-4 text-xs text-gray-500">
+                        Sonuç Açıklama Tarihi: <span className="font-semibold text-gray-700">{tarihFormat(ihale.sonuc_aciklama_tarihi)}</span>
                       </div>
                     )}
 

@@ -192,6 +192,12 @@ export default async function IhaleDetay({
                 <p className="text-xs text-gray-400 mb-1">Son Teklif Tarihi</p>
                 <p className="font-semibold text-gray-900">{formatTarih(ihale.bitis_tarihi)}</p>
               </div>
+              {ihale.sonuc_aciklama_tarihi && (
+                <div className="bg-gray-50 rounded-lg p-4 col-span-2">
+                  <p className="text-xs text-gray-400 mb-1">Sonuç Açıklama Tarihi</p>
+                  <p className="font-semibold text-gray-900">{formatTarih(ihale.sonuc_aciklama_tarihi)}</p>
+                </div>
+              )}
             </div>
           </div>
 

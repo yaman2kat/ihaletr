@@ -21,6 +21,7 @@ export default function Navbar() {
   const [planTuru,   setPlanTuru]   = useState<string | null>(null);
   const [kalanHak,   setKalanHak]   = useState<number | null>(null);
   const [hesapTuru,  setHesapTuru]  = useState<HesapTuru | null>(null);
+  const [adminMi,    setAdminMi]    = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -28,12 +29,13 @@ export default function Navbar() {
     async function profilGetir(userId: string) {
       const { data } = await supabase
         .from("kullanicilar")
-        .select("plan_turu, kalan_teklif_hakki, hesap_turu")
+        .select("plan_turu, kalan_teklif_hakki, hesap_turu, rol")
         .eq("id", userId)
         .single();
       setPlanTuru(data?.plan_turu ?? "ucretsiz");
       setKalanHak(data?.kalan_teklif_hakki ?? 0);
       setHesapTuru((data?.hesap_turu as HesapTuru) ?? "arsa_sahibi");
+      setAdminMi(data?.rol === "admin");
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -45,7 +47,7 @@ export default function Navbar() {
       (_event, session) => {
         setKullanici(session?.user ?? null);
         if (session?.user) profilGetir(session.user.id);
-        else { setPlanTuru(null); setKalanHak(null); setHesapTuru(null); }
+        else { setPlanTuru(null); setKalanHak(null); setHesapTuru(null); setAdminMi(false); }
       }
     );
 
@@ -69,10 +71,11 @@ export default function Navbar() {
   const authYukleniyor = kullanici === undefined;
 
   // "İhale Oluştur" yalnızca arsa sahibi / her ikisi hesap türüne gösterilir;
-  // saf müteahhit hesaplarına ve girişsiz ziyaretçilere hiç gösterilmez.
+  // saf müteahhit hesaplarına, girişsiz ziyaretçilere ve admin hesaplarına
+  // hiç gösterilmez (admin yerine "Yönetim Paneli" linkini görür).
   // Profil (hesapTuru) henüz yüklenmemişse de gizli kalır (yanlış hesap
   // türüne kısa süreliğine bile gösterilmesin diye).
-  const ihaleOlusturGoster = !!kullanici && (hesapTuru === "arsa_sahibi" || hesapTuru === "her_ikisi");
+  const ihaleOlusturGoster = !!kullanici && !adminMi && (hesapTuru === "arsa_sahibi" || hesapTuru === "her_ikisi");
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
@@ -88,6 +91,9 @@ export default function Navbar() {
             <Link href="/ihaleler"      className="text-gray-600 hover:text-blue-700 font-medium transition-colors">İhaleler</Link>
             {ihaleOlusturGoster && (
               <Link href="/ihale-olustur" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">İhale Oluştur</Link>
+            )}
+            {adminMi && (
+              <Link href="/admin" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Yönetim Paneli</Link>
             )}
             <Link href="/danismanlar"   className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Destek</Link>
           </div>
@@ -173,6 +179,9 @@ export default function Navbar() {
             <Link href="/ihaleler"      className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>İhaleler</Link>
             {ihaleOlusturGoster && (
               <Link href="/ihale-olustur" className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>İhale Oluştur</Link>
+            )}
+            {adminMi && (
+              <Link href="/admin" className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Yönetim Paneli</Link>
             )}
             <Link href="/danismanlar"   className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Destek</Link>
             <Link href="/premium"       className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Premium</Link>

@@ -75,6 +75,14 @@ CREATE TABLE public.kullanicilar (
   avatar_url    text,
   rol           kullanici_rol NOT NULL DEFAULT 'bireysel',
   hesap_turu    hesap_turu_tipi NOT NULL DEFAULT 'arsa_sahibi',
+  -- kisi_turu (bireysel/kurumsal): mevcut "hesap_turu" (panel görünümü)
+  -- ve "rol" (bireysel/firma/admin, fiilen yalnızca admin ayrımı için
+  -- kullanılıyor) alanlarından BAĞIMSIZ, yeni bir sütun -- isim
+  -- çakışmasını önlemek için "hesap_turu" yeniden kullanılmadı.
+  kisi_turu     text CHECK (kisi_turu IS NULL OR kisi_turu IN ('bireysel', 'kurumsal')),
+  kimlik_dogrulama_durumu text NOT NULL DEFAULT 'bekliyor'
+    CHECK (kimlik_dogrulama_durumu IN ('bekliyor', 'onaylandi', 'reddedildi')),
+  kimlik_dogrulama_notu   text,
   davet_kodu    text        UNIQUE,
   davet_eden_id uuid        REFERENCES public.kullanicilar(id) ON DELETE SET NULL,
   created_at    timestamptz NOT NULL DEFAULT now(),
@@ -170,6 +178,11 @@ BEGIN
      OR NEW.davet_kodu IS DISTINCT FROM OLD.davet_kodu
      OR NEW.davet_eden_id IS DISTINCT FROM OLD.davet_eden_id
      OR NEW.uzatma_havuzu_gun IS DISTINCT FROM OLD.uzatma_havuzu_gun
+     -- kimlik_dogrulama_durumu/notu: aksi halde bir kullanici dogrudan
+     -- PATCH ile kendi kimligini "onaylandi" yapip admin incelemesini
+     -- (ve buna bagli ihale/teklif RLS kapisini) tamamen bypass edebilirdi.
+     OR NEW.kimlik_dogrulama_durumu IS DISTINCT FROM OLD.kimlik_dogrulama_durumu
+     OR NEW.kimlik_dogrulama_notu IS DISTINCT FROM OLD.kimlik_dogrulama_notu
      -- ucretsiz_ihale_hakki_kullanildi: kullanici kendi ihale-olustur
      -- akisinda false->true gecisini kendi PATCH'iyle yapar (mesru akis,
      -- ihale-olustur/page.tsx), ama true->false'a geri cevirip hakkini
@@ -237,6 +250,71 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ------------------------------------------------------------
+-- 1b. KİMLİK DOĞRULAMA BAŞVURULARI
+-- Kayıt sonrası ihale açma/teklif verme öncesinde tamamlanması istenen
+-- kimlik/kurum doğrulama akışının başvuru kayıtları. Onboarding
+-- sayfası (src/app/onboarding) buraya bir satır INSERT eder; admin
+-- karar verince trigger, kullanicilar.kimlik_dogrulama_durumu'nu
+-- senkron günceller.
+-- ------------------------------------------------------------
+
+CREATE TABLE public.kimlik_dogrulama_basvurulari (
+  id                     uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  kullanici_id           uuid        NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  kisi_turu              text        NOT NULL CHECK (kisi_turu IN ('bireysel', 'kurumsal')),
+  ad_soyad               text,
+  firma_adi              text,
+  tc_kimlik_no           text,
+  vergi_no               text,
+  kimlik_on_url          text,
+  kimlik_arka_url        text,
+  selfie_url             text,
+  imza_sirkuleri_url     text,
+  ticaret_sicil_url      text,
+  otomatik_kontrol_sonucu text NOT NULL CHECK (otomatik_kontrol_sonucu IN ('otomatik_onay_bekliyor', 'manuel_inceleme')),
+  admin_karari           text NOT NULL DEFAULT 'bekliyor' CHECK (admin_karari IN ('bekliyor', 'onaylandi', 'reddedildi')),
+  red_notu               text,
+  created_at             timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_kimlik_basvuru_kullanici ON public.kimlik_dogrulama_basvurulari(kullanici_id);
+CREATE INDEX idx_kimlik_basvuru_karar     ON public.kimlik_dogrulama_basvurulari(admin_karari);
+
+ALTER TABLE public.kimlik_dogrulama_basvurulari ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Kullanici kendi basvurusunu gorebilir"
+  ON public.kimlik_dogrulama_basvurulari FOR SELECT USING (
+    auth.uid() = kullanici_id OR public.is_admin()
+  );
+
+-- admin_karari = 'bekliyor' sarti: aksi halde bir kullanici dogrudan
+-- admin_karari:'onaylandi' ile "onayli gorunen" bir basvuru olusturabilirdi.
+CREATE POLICY "Kullanici kendi basvurusunu olusturabilir"
+  ON public.kimlik_dogrulama_basvurulari FOR INSERT WITH CHECK (
+    auth.uid() = kullanici_id AND admin_karari = 'bekliyor'
+  );
+
+CREATE POLICY "Admin basvuru kararini guncelleyebilir"
+  ON public.kimlik_dogrulama_basvurulari FOR UPDATE USING (public.is_admin());
+
+CREATE OR REPLACE FUNCTION public.kimlik_basvuru_karar_senkron()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.admin_karari IS DISTINCT FROM OLD.admin_karari AND NEW.admin_karari IN ('onaylandi', 'reddedildi') THEN
+    UPDATE public.kullanicilar
+    SET kimlik_dogrulama_durumu = NEW.admin_karari,
+        kimlik_dogrulama_notu   = NEW.red_notu
+    WHERE id = NEW.kullanici_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_kimlik_basvuru_karar_senkron
+  AFTER UPDATE ON public.kimlik_dogrulama_basvurulari
+  FOR EACH ROW EXECUTE FUNCTION public.kimlik_basvuru_karar_senkron();
+
+-- ------------------------------------------------------------
 -- 2. İHALELER
 -- ------------------------------------------------------------
 
@@ -269,6 +347,14 @@ CREATE TABLE public.ihaleler (
   inceleme_durumu    inceleme_durumu NOT NULL DEFAULT 'beklemede',
   red_sebebi         text,
   otomatik_sonlandirildi boolean    NOT NULL DEFAULT false,
+  -- Yayınlanma anından itibaren geri sayım + sonuç açıklama tarihi.
+  -- sure_gun: kullanıcının formda seçtiği gün sayısı. yayinlanma_tarihi:
+  -- admin onayladığı an set edilir (NULL iken ihale henüz yayında
+  -- sayılmaz). sonuc_aciklama_tarihi: bitis_tarihi + 21 gün, admin
+  -- onayında hesaplanır.
+  sure_gun               integer,
+  yayinlanma_tarihi      timestamptz,
+  sonuc_aciklama_tarihi  date,
   created_at        timestamptz   NOT NULL DEFAULT now(),
   updated_at        timestamptz   NOT NULL DEFAULT now(),
 
@@ -295,9 +381,20 @@ CREATE POLICY "Herkes ihaleleri gorebilir"
 -- Eski (giriş zorunlu) hali:
 -- CREATE POLICY "Giris yapan ihale olusturabilir"
 --   ON public.ihaleler FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+-- Girisli kullanicilar icin ayrica kimlik dogrulamasinin onaylanmis
+-- olmasi da aranir (bkz. 15_duzeltme_migration.sql) -- misafir akisinda
+-- (auth.uid() NULL) bu sart aranmaz, misafirin zaten kullanicilar
+-- satiri yoktur.
 CREATE POLICY "Giris yapan ya da misafir ihale olusturabilir"
   ON public.ihaleler FOR INSERT WITH CHECK (
-    (auth.uid() IS NOT NULL AND (olusturan_id IS NULL OR olusturan_id = auth.uid()))
+    (
+      auth.uid() IS NOT NULL
+      AND (olusturan_id IS NULL OR olusturan_id = auth.uid())
+      AND EXISTS (
+        SELECT 1 FROM public.kullanicilar
+        WHERE id = auth.uid() AND kimlik_dogrulama_durumu = 'onaylandi'
+      )
+    )
     OR (auth.uid() IS NULL AND olusturan_id IS NULL)
   );
 
@@ -361,6 +458,13 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- ihale_duzenle_ve_tekrar_gonder() gibi mesru sistem RPC'lerinin bu
+  -- kisiti bilincli olarak bypass etmesi icin (kullanici_kisitli_sutun_
+  -- kontrol()'deki ayni desen).
+  IF current_setting('ihaletr.sistem_guncellemesi', true) = 'true' THEN
+    RETURN NEW;
+  END IF;
+
   SELECT (rol = 'admin') INTO admin_mi FROM public.kullanicilar WHERE id = auth.uid();
   IF admin_mi THEN
     RETURN NEW;
@@ -388,6 +492,56 @@ DROP TRIGGER IF EXISTS trg_ihale_kisitli_sutun_kontrol ON public.ihaleler;
 CREATE TRIGGER trg_ihale_kisitli_sutun_kontrol
   BEFORE UPDATE ON public.ihaleler
   FOR EACH ROW EXECUTE FUNCTION public.ihale_kisitli_sutun_kontrol();
+
+-- Reddedilen bir ihaleyi sahibinin düzenleyip yeniden admin incelemesine
+-- göndermesi -- yukarıdaki trigger inceleme_durumu/red_sebebi'ni normal
+-- UPDATE ile korurken, bu SECURITY DEFINER RPC bilinçli olarak
+-- 'ihaletr.sistem_guncellemesi' bayrağıyla bunu bypass eder. Yalnızca
+-- GERÇEKTEN reddedilmiş VE kendi ihalesi olan satırlarda çalışır.
+CREATE OR REPLACE FUNCTION public.ihale_duzenle_ve_tekrar_gonder(
+  p_ihale_id         uuid,
+  p_baslik           text,
+  p_kategori         text,
+  p_aciklama         text,
+  p_kurum            text,
+  p_ilce             text,
+  p_mahalle          text,
+  p_cadde_sokak      text,
+  p_ada_no           text,
+  p_parsel_no        text,
+  p_mulkiyet_durumu  mulkiyet_durumu_tipi,
+  p_sirket_unvani    text,
+  p_yetkili_kisi_adi text
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Giris yapmalisiniz.';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.ihaleler
+    WHERE id = p_ihale_id AND olusturan_id = auth.uid() AND inceleme_durumu = 'reddedildi'
+  ) THEN
+    RAISE EXCEPTION 'Bu ihale size ait reddedilmis bir ihale degil.';
+  END IF;
+
+  PERFORM set_config('ihaletr.sistem_guncellemesi', 'true', true);
+
+  UPDATE public.ihaleler
+  SET baslik = p_baslik, kategori = p_kategori, aciklama = p_aciklama, kurum = p_kurum,
+      ilce = p_ilce, mahalle = p_mahalle, cadde_sokak = p_cadde_sokak,
+      ada_no = p_ada_no, parsel_no = p_parsel_no, mulkiyet_durumu = p_mulkiyet_durumu,
+      sirket_unvani = p_sirket_unvani, yetkili_kisi_adi = p_yetkili_kisi_adi,
+      inceleme_durumu = 'beklemede', red_sebebi = NULL, durum = 'beklemede',
+      updated_at = now()
+  WHERE id = p_ihale_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ihale_duzenle_ve_tekrar_gonder(
+  uuid, text, text, text, text, text, text, text, text, text, mulkiyet_durumu_tipi, text, text
+) TO authenticated;
 
 -- ------------------------------------------------------------
 -- 3. TEKLİFLER
@@ -421,6 +575,10 @@ CREATE POLICY "Giris yapan teklif verebilir"
     auth.uid() IS NOT NULL
     AND auth.uid() = kullanici_id
     AND auth.uid() IS DISTINCT FROM (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
+    AND EXISTS (
+      SELECT 1 FROM public.kullanicilar
+      WHERE id = auth.uid() AND kimlik_dogrulama_durumu = 'onaylandi'
+    )
   );
 
 CREATE POLICY "Teklif sahibi teklifini silebilir"
@@ -1161,6 +1319,40 @@ CREATE POLICY "Teklif dosyasi sadece ihale bitince yetkiliye acik"
   );
 
 -- ------------------------------------------------------------
+-- 9c. KİMLİK DOĞRULAMA BELGELERİ — ÖZEL (PRIVATE) STORAGE BUCKET
+-- Obje yolu: {kullanici_id}/... -- yalnızca sahibi yükleyebilir,
+-- yalnızca admin görüntüleyebilir (bkz. src/app/onboarding).
+-- ------------------------------------------------------------
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('admin_belgeler_dogrulama', 'admin_belgeler_dogrulama', false)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Kullanici kendi kimlik belgesini yukleyebilir"
+  ON storage.objects FOR INSERT WITH CHECK (
+    bucket_id = 'admin_belgeler_dogrulama'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+CREATE POLICY "Sadece admin kimlik belgesini gorebilir"
+  ON storage.objects FOR SELECT USING (
+    bucket_id = 'admin_belgeler_dogrulama'
+    AND public.is_admin()
+  );
+
+-- ------------------------------------------------------------
+-- 9d. ÖRNEK ŞARTNAME ŞABLONLARI — HERKESE AÇIK (PUBLIC) STORAGE BUCKET
+-- 4 kategori için birer .docx taslak barındırır (bkz. scratchpad'deki
+-- tek seferlik yükleme script'i). Herkese açık olduğundan ekstra bir
+-- SELECT politikası gerekmez (ihale-belgeleri ile aynı desen).
+-- ------------------------------------------------------------
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('ornek-sartnameler', 'ornek-sartnameler', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- ------------------------------------------------------------
 -- 10. MÜTEAHHİT DAVET SİSTEMİ
 -- Her kullanıcının benzersiz bir davet_kodu'su vardır (bkz. handle_new_user).
 -- Eski model (kayıt anında/e-posta onayında otomatik ödül, arsa sahibi
@@ -1712,5 +1904,16 @@ BEGIN
     WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'bildirimler'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.bildirimler;
+  END IF;
+END $$;
+
+-- ihaleler tablosu: admin onayı/reddi genel listede/panelde canlı yansısın.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'ihaleler'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.ihaleler;
   END IF;
 END $$;

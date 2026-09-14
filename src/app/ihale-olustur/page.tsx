@@ -6,7 +6,21 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
 import { PLAN_ILK_IHALE_GUNU } from "@/lib/plan-limitleri";
-import type { PlanTuru, MulkiyetDurumu } from "@/lib/types";
+import { autoResizeTextarea } from "@/lib/ui";
+import type { PlanTuru, MulkiyetDurumu, KisiTuru } from "@/lib/types";
+
+const ORNEK_SARTNAME_DOSYA: Record<string, string> = {
+  "Kentsel Dönüşüm": "kentsel-donusum.docx",
+  "Kat Karşılığı":   "kat-karsiligi.docx",
+  "Yapı İnşaat":     "yapi-insaat.docx",
+  "Bakım & Onarım":  "bakim-onarim.docx",
+};
+
+function ornekSartnameUrl(kategori: string): string | null {
+  const dosya = ORNEK_SARTNAME_DOSYA[kategori];
+  if (!dosya) return null;
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ornek-sartnameler/${dosya}`;
+}
 
 const TASLAK_ANAHTARI = "ihale-olustur-taslak";
 
@@ -68,20 +82,31 @@ const ILLER = [
   "Samsun","Sakarya","Şanlıurfa","Trabzon","Van",
 ];
 
-function maxBitisTarihi(planTuru: string): string {
-  const maxGun = PLAN_ILK_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_ILK_IHALE_GUNU.ucretsiz;
-  const d = new Date();
-  d.setDate(d.getDate() + maxGun);
-  return d.toISOString().split("T")[0];
+function AlanHatasi({ alan, eksikAlanlar }: { alan: string; eksikAlanlar: string[] }) {
+  if (!eksikAlanlar.includes(alan)) return null;
+  return <p className="text-xs text-red-600 mt-1">Bu alan zorunludur.</p>;
 }
+
+const ALAN_ETIKET: Record<string, string> = {
+  baslik: "İhale Başlığı", kategori: "Kategori", aciklama: "Açıklama", kurum: "Kurum / Firma",
+  sehir: "Şehir", ilce: "İlçe", mahalle: "Mahalle", caddeSokak: "Cadde/Sokak",
+  yuzolcumuM2: "Yüzölçümü (m²)", adaNo: "Ada No", parselNo: "Parsel No",
+  sureGun: "Yayında Kalma Süresi (gün)",
+  yapiInsaatRuhsati: "Yapı İnşaat Ruhsatı", proje: "Proje",
+  sartname: "Yapı Şartnamesi", tapu: "Tapu Fotokopisi", projeDosyasi: "Bina Projesi (Proje Var seçildi)",
+  mulkiyetDurumu: "Mülkiyet Durumu", sirketUnvani: "Şirket Unvanı", yetkiliKisiAdi: "Yetkili Kişi Adı",
+  otomatikSonlandirmaOnay: "Otomatik sonlandırma onayı",
+};
 
 export default function IhaleOlustur() {
   const router = useRouter();
   const [planTuru, setPlanTuru] = useState<string>("ucretsiz");
+  const [kisiTuru, setKisiTuru] = useState<KisiTuru | null>(null);
+  const [kimlikDurumu, setKimlikDurumu] = useState<"yukleniyor" | "girissiz" | "bekliyor" | "reddedildi" | "onaylandi">("yukleniyor");
   const [form, setForm] = useState({
     baslik: "", kategori: "", aciklama: "",
     kurum: "", sehir: "", ilce: "", mahalle: "", caddeSokak: "", adaNo: "", parselNo: "", yuzolcumuM2: "",
-    bitisTarihi: "",
+    sureGun: "",
     yapiInsaatRuhsati: "" as "" | "var" | "yok",
     proje: "" as "" | "var" | "yok",
     mulkiyetDurumu: "" as "" | MulkiyetDurumu,
@@ -98,19 +123,37 @@ export default function IhaleOlustur() {
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState("");
   const [belgeUyarisi, setBelgeUyarisi] = useState<string[] | null>(null);
+  const [onayModaliAcik, setOnayModaliAcik] = useState(false);
+  const [basariliModalAcik, setBasariliModalAcik] = useState(false);
   const taslakYuklendiRef = useRef(false);
+  const alanRef = useRef<Record<string, HTMLElement | null>>({});
+
+  function refAta(alan: string) {
+    // Zorunlu-alan validasyonu basarisiz oldugunda ilk hatali alana
+    // scrollIntoView yapabilmek icin -- callback yalnizca commit
+    // asamasinda .current'a yazar, render sirasinda okumaz.
+    // eslint-disable-next-line react-hooks/refs
+    return (el: HTMLElement | null) => { alanRef.current[alan] = el; };
+  }
 
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) return;
+      if (!session?.user) { setKimlikDurumu("girissiz"); return; }
       const { data } = await supabase
         .from("kullanicilar")
-        .select("plan_turu, ad_soyad")
+        .select("plan_turu, ad_soyad, firma_adi, kisi_turu, kimlik_dogrulama_durumu")
         .eq("id", session.user.id)
         .single();
       if (data?.plan_turu) setPlanTuru(data.plan_turu);
       if (data?.ad_soyad) setBasvuruSahibiAdi(data.ad_soyad);
+      setKisiTuru((data?.kisi_turu as KisiTuru | null) ?? null);
+      setKimlikDurumu((data?.kimlik_dogrulama_durumu as "bekliyor" | "reddedildi" | "onaylandi") ?? "bekliyor");
+
+      // Kurum/Firma alanını hesap türüne göre otomatik doldur -- kullanıcı
+      // yine de değiştirebilir (bkz. form input'u aşağıda).
+      const otomatikKurum = data?.kisi_turu === "kurumsal" ? data?.firma_adi : data?.ad_soyad;
+      if (otomatikKurum) setForm((f) => (f.kurum ? f : { ...f, kurum: otomatikKurum }));
     });
   }, []);
 
@@ -164,36 +207,64 @@ export default function IhaleOlustur() {
 
   function dogrula(): string[] {
     const eksik: string[] = [];
-    if (!form.baslik.trim())          eksik.push("İhale Başlığı");
-    if (!form.kategori)               eksik.push("Kategori");
-    if (!form.aciklama.trim())        eksik.push("Açıklama");
-    if (!form.kurum.trim())           eksik.push("Kurum / Firma");
-    if (!form.sehir)                  eksik.push("Şehir");
-    if (!form.ilce.trim())            eksik.push("İlçe");
-    if (!form.mahalle.trim())         eksik.push("Mahalle");
-    if (!form.caddeSokak.trim())      eksik.push("Cadde/Sokak");
-    if (!form.adaNo.trim())           eksik.push("Ada No");
-    if (!form.parselNo.trim())        eksik.push("Parsel No");
-    if (!form.yuzolcumuM2)            eksik.push("Yüzölçümü (m²)");
-    if (!form.bitisTarihi)            eksik.push("Son Teklif Tarihi");
-    if (!form.yapiInsaatRuhsati)      eksik.push("Yapı İnşaat Ruhsatı");
-    if (!form.proje)                  eksik.push("Proje");
-    if (!dosyalar.sartname)           eksik.push("Yapı Şartnamesi");
-    if (!dosyalar.tapu)               eksik.push("Tapu Fotokopisi");
-    if (form.proje === "var" && !dosyalar.proje) eksik.push("Bina Projesi (Proje Var seçildi)");
-    if (!form.mulkiyetDurumu)         eksik.push("Mülkiyet Durumu");
+    if (!form.baslik.trim())          eksik.push("baslik");
+    if (!form.kategori)               eksik.push("kategori");
+    if (!form.aciklama.trim())        eksik.push("aciklama");
+    if (!form.kurum.trim())           eksik.push("kurum");
+    if (!form.sehir)                  eksik.push("sehir");
+    if (!form.ilce.trim())            eksik.push("ilce");
+    if (!form.mahalle.trim())         eksik.push("mahalle");
+    if (!form.caddeSokak.trim())      eksik.push("caddeSokak");
+    if (!form.adaNo.trim())           eksik.push("adaNo");
+    if (!form.parselNo.trim())        eksik.push("parselNo");
+    if (!form.yuzolcumuM2)            eksik.push("yuzolcumuM2");
+    const maxGun = PLAN_ILK_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_ILK_IHALE_GUNU.ucretsiz;
+    const sureGunSayi = Number(form.sureGun);
+    if (!form.sureGun || sureGunSayi <= 0 || sureGunSayi > maxGun) eksik.push("sureGun");
+    if (!form.yapiInsaatRuhsati)      eksik.push("yapiInsaatRuhsati");
+    if (!form.proje)                  eksik.push("proje");
+    if (!dosyalar.sartname)           eksik.push("sartname");
+    if (!dosyalar.tapu)               eksik.push("tapu");
+    if (form.proje === "var" && !dosyalar.proje) eksik.push("projeDosyasi");
+    if (!form.mulkiyetDurumu)         eksik.push("mulkiyetDurumu");
     if (form.mulkiyetDurumu === "sirket") {
-      if (!form.sirketUnvani.trim())   eksik.push("Şirket Unvanı");
-      if (!form.yetkiliKisiAdi.trim()) eksik.push("Yetkili Kişi Adı");
+      if (!form.sirketUnvani.trim())   eksik.push("sirketUnvani");
+      if (!form.yetkiliKisiAdi.trim()) eksik.push("yetkiliKisiAdi");
     }
-    if (planTuru === "ucretsiz" && !otomatikSonlandirmaOnay) eksik.push("Otomatik sonlandırma onayı");
+    if (planTuru === "ucretsiz" && !otomatikSonlandirmaOnay) eksik.push("otomatikSonlandirmaOnay");
     return eksik;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Hatalı alan özeti render edilip DOM'a eklendikten (ve üstteki hata
+  // kutusu formu asagi ittikten) SONRA calisir -- setEksikAlanlar hemen
+  // ardindan scrollIntoView cagirmak, hata kutusu henuz DOM'da yokken
+  // eski (kutu olmadan hesaplanmis) konuma kaydirip ardindan kutunun
+  // eklenmesiyle o konumu tekrar gecersiz kiliyordu (canli testte tespit
+  // edildi -- sayfa yanlis, genelde sayfa ortasinda bir yere kayiyordu).
+  useEffect(() => {
+    if (eksikAlanlar.length === 0) return;
+    const ilkAlan = alanRef.current[eksikAlanlar[0]];
+    ilkAlan?.scrollIntoView({ behavior: "auto", block: "center" });
+  }, [eksikAlanlar]);
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setHata("");
-    setEksikAlanlar([]);
+
+    const eksik = dogrula();
+    setEksikAlanlar(eksik);
+    if (eksik.length > 0) {
+      return;
+    }
+
+    // Doğrulama geçti — yayınlama hakkının kullanılacağını onaylatmak için
+    // önce onay modalı gösterilir, gerçek kayıt yalnızca "Evet" ile başlar.
+    setOnayModaliAcik(true);
+  }
+
+  async function yayinla() {
+    setOnayModaliAcik(false);
+    setHata("");
 
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
@@ -221,13 +292,19 @@ export default function IhaleOlustur() {
       }
     }
 
-    const eksik = dogrula();
-    if (eksik.length > 0) {
-      setEksikAlanlar(eksik);
-      return;
-    }
-
     setYukleniyor(true);
+
+    // Yayınlanma anına kadar (admin onayı) geri sayım başlamaz -- bitis_tarihi
+    // burada yalnızca DB CHECK kısıtını (bitis > baslangic) sağlamak için
+    // geçici olarak hesaplanır; admin onayladığında yayinlanma_tarihi baz
+    // alınarak yeniden hesaplanır (bkz. admin/ihaleler/[id]/page.tsx).
+    const baslangicTarihi = new Date().toISOString().split("T")[0];
+    const sureGunSayi = Number(form.sureGun);
+    const geciciBitisTarihi = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + sureGunSayi);
+      return d.toISOString().split("T")[0];
+    })();
 
     // 1. İhaleyi kaydet
     const { data: ihaleData, error: ihaleError } = await supabase
@@ -249,8 +326,9 @@ export default function IhaleOlustur() {
         // oldugu icin (kaldirilmadi, sadece kullanimdan kaldirildi)
         // sabit bir yer tutucu deger gonderilir.
         baslangic_fiyati: 1,
-        baslangic_tarihi: new Date().toISOString().split("T")[0],
-        bitis_tarihi:           form.bitisTarihi,
+        baslangic_tarihi: baslangicTarihi,
+        bitis_tarihi:           geciciBitisTarihi,
+        sure_gun:               sureGunSayi,
         durum:                  "beklemede",
         yapi_insaat_ruhsati:    form.yapiInsaatRuhsati || null,
         proje:                  form.proje || null,
@@ -385,13 +463,24 @@ export default function IhaleOlustur() {
       return;
     }
 
-    router.push("/ihaleler");
+    setBasariliModalAcik(true);
+  }
+
+  function basariliModaliKapat() {
+    setBasariliModalAcik(false);
+    router.push("/panel");
     router.refresh();
   }
 
   function guncelle(alan: string, deger: string) {
     setForm((f) => ({ ...f, [alan]: deger }));
   }
+
+  // Zorunlu alan hatası -- kırmızı çerçeve.
+  function hataSinifi(alan: string): string {
+    return eksikAlanlar.includes(alan) ? "border-red-400 ring-1 ring-red-300" : "";
+  }
+
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
@@ -405,6 +494,24 @@ export default function IhaleOlustur() {
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Yeni İhale Oluştur</h1>
         <p className="text-gray-500 text-sm mb-4">Tüm alanları eksiksiz doldurun.</p>
 
+        {kimlikDurumu === "bekliyor" || kimlikDurumu === "reddedildi" ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-8 text-center">
+            <p className="text-blue-900 font-semibold mb-2">
+              {kimlikDurumu === "reddedildi" ? "Kimlik doğrulamanız reddedildi" : "Kimlik doğrulamanızı tamamlayın"}
+            </p>
+            <p className="text-sm text-blue-700 mb-5">
+              İhale yayınlayabilmek için önce kimlik/kurum doğrulamanızı tamamlamanız gerekir.
+              {kimlikDurumu === "reddedildi" && " Bilgilerinizi güncelleyip yeniden başvurabilirsiniz."}
+            </p>
+            <Link
+              href="/onboarding"
+              className="inline-block bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-800 transition-colors text-sm"
+            >
+              Kimlik Doğrulamaya Git →
+            </Link>
+          </div>
+        ) : (
+        <>
         {planTuru === "ucretsiz" && (
           <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">
             <div className="flex items-center gap-2 text-sm text-amber-800">
@@ -449,7 +556,7 @@ export default function IhaleOlustur() {
             <p className="font-semibold mb-2">Lütfen aşağıdaki alanları doldurun:</p>
             <ul className="list-disc list-inside flex flex-col gap-1">
               {eksikAlanlar.map((alan) => (
-                <li key={alan}>{alan}</li>
+                <li key={alan}>{ALAN_ETIKET[alan] ?? alan}</li>
               ))}
             </ul>
           </div>
@@ -461,10 +568,12 @@ export default function IhaleOlustur() {
               İhale Başlığı <span className="text-red-500">*</span>
             </label>
             <input
-              type="text" required placeholder="Örn: Kadıköy Sosyal Konut Projesi"
+              ref={refAta("baslik")}
+              type="text" required autoCapitalize="words" placeholder="Örn: Kadıköy Sosyal Konut Projesi"
               value={form.baslik} onChange={(e) => guncelle("baslik", e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${hataSinifi("baslik")}`}
             />
+            <AlanHatasi alan="baslik" eksikAlanlar={eksikAlanlar} />
           </div>
 
           <div>
@@ -472,12 +581,14 @@ export default function IhaleOlustur() {
               Kategori <span className="text-red-500">*</span>
             </label>
             <select
+              ref={refAta("kategori")}
               required value={form.kategori} onChange={(e) => guncelle("kategori", e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${hataSinifi("kategori")}`}
             >
               <option value="">Kategori seçin...</option>
               {KATEGORILER.map((k) => <option key={k} value={k}>{k}</option>)}
             </select>
+            <AlanHatasi alan="kategori" eksikAlanlar={eksikAlanlar} />
           </div>
 
           <div>
@@ -485,34 +596,41 @@ export default function IhaleOlustur() {
               Açıklama <span className="text-red-500">*</span>
             </label>
             <textarea
+              ref={refAta("aciklama")}
               required rows={4} placeholder="İhale kapsamını, teknik şartları ve beklentileri açıklayın..."
               value={form.aciklama} onChange={(e) => guncelle("aciklama", e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              onInput={autoResizeTextarea}
+              className={`w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${hataSinifi("aciklama")}`}
             />
+            <AlanHatasi alan="aciklama" eksikAlanlar={eksikAlanlar} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Kurum / Firma <span className="text-red-500">*</span>
+                {kisiTuru === "kurumsal" ? "Kurum/Firma Adı" : "Ad Soyad"} <span className="text-red-500">*</span>
               </label>
               <input
-                type="text" required placeholder="Yılmaz İnşaat A.Ş."
+                ref={refAta("kurum")}
+                type="text" required placeholder={kisiTuru === "kurumsal" ? "Yılmaz İnşaat A.Ş." : "Ad Soyad"}
                 value={form.kurum} onChange={(e) => guncelle("kurum", e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${hataSinifi("kurum")}`}
               />
+              <AlanHatasi alan="kurum" eksikAlanlar={eksikAlanlar} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Şehir <span className="text-red-500">*</span>
               </label>
               <select
+                ref={refAta("sehir")}
                 required value={form.sehir} onChange={(e) => guncelle("sehir", e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${hataSinifi("sehir")}`}
               >
                 <option value="">İl seçin...</option>
                 {ILLER.map((il) => <option key={il} value={il}>{il}</option>)}
               </select>
+              <AlanHatasi alan="sehir" eksikAlanlar={eksikAlanlar} />
             </div>
           </div>
 
@@ -525,60 +643,72 @@ export default function IhaleOlustur() {
                   İlçe <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={refAta("ilce")}
                   type="text" required placeholder="Örn: Kadıköy"
                   value={form.ilce} onChange={(e) => guncelle("ilce", e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                  className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm ${hataSinifi("ilce")}`}
                 />
+                <AlanHatasi alan="ilce" eksikAlanlar={eksikAlanlar} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
                   Mahalle <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={refAta("mahalle")}
                   type="text" required placeholder="Örn: Caferağa"
                   value={form.mahalle} onChange={(e) => guncelle("mahalle", e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                  className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm ${hataSinifi("mahalle")}`}
                 />
+                <AlanHatasi alan="mahalle" eksikAlanlar={eksikAlanlar} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
                   Cadde/Sokak <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={refAta("caddeSokak")}
                   type="text" required placeholder="Örn: Bahariye Caddesi"
                   value={form.caddeSokak} onChange={(e) => guncelle("caddeSokak", e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                  className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm ${hataSinifi("caddeSokak")}`}
                 />
+                <AlanHatasi alan="caddeSokak" eksikAlanlar={eksikAlanlar} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
                   Yüzölçümü (m²) <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={refAta("yuzolcumuM2")}
                   type="number" required min="0" placeholder="Örn: 1200"
                   value={form.yuzolcumuM2} onChange={(e) => guncelle("yuzolcumuM2", e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                  className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm ${hataSinifi("yuzolcumuM2")}`}
                 />
+                <AlanHatasi alan="yuzolcumuM2" eksikAlanlar={eksikAlanlar} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
                   Ada No <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={refAta("adaNo")}
                   type="text" required placeholder="Örn: 2841"
                   value={form.adaNo} onChange={(e) => guncelle("adaNo", e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                  className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm ${hataSinifi("adaNo")}`}
                 />
+                <AlanHatasi alan="adaNo" eksikAlanlar={eksikAlanlar} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
                   Parsel No <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={refAta("parselNo")}
                   type="text" required placeholder="Örn: 14"
                   value={form.parselNo} onChange={(e) => guncelle("parselNo", e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                  className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm ${hataSinifi("parselNo")}`}
                 />
+                <AlanHatasi alan="parselNo" eksikAlanlar={eksikAlanlar} />
               </div>
             </div>
 
@@ -630,7 +760,7 @@ export default function IhaleOlustur() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Yapı İnşaat Ruhsatı <span className="text-red-500">*</span>
                 </label>
-                <div className="flex gap-6">
+                <div ref={refAta("yapiInsaatRuhsati")} className="flex gap-6">
                   {(["var", "yok"] as const).map((secenek) => (
                     <label key={secenek} className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -645,12 +775,13 @@ export default function IhaleOlustur() {
                     </label>
                   ))}
                 </div>
+                <AlanHatasi alan="yapiInsaatRuhsati" eksikAlanlar={eksikAlanlar} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Proje <span className="text-red-500">*</span>
                 </label>
-                <div className="flex gap-6">
+                <div ref={refAta("proje")} className="flex gap-6">
                   {(["var", "yok"] as const).map((secenek) => (
                     <label key={secenek} className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -665,21 +796,24 @@ export default function IhaleOlustur() {
                     </label>
                   ))}
                 </div>
+                <AlanHatasi alan="proje" eksikAlanlar={eksikAlanlar} />
               </div>
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Son Teklif Tarihi <span className="text-red-500">*</span>
+              Yayında Kalma Süresi (gün) <span className="text-red-500">*</span>
             </label>
             <input
-              type="date" required
-              min={new Date().toISOString().split("T")[0]}
-              max={maxBitisTarihi(planTuru)}
-              value={form.bitisTarihi} onChange={(e) => guncelle("bitisTarihi", e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              ref={refAta("sureGun")}
+              type="number" required min={1}
+              max={PLAN_ILK_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_ILK_IHALE_GUNU.ucretsiz}
+              placeholder={`Örn: ${PLAN_ILK_IHALE_GUNU[planTuru as PlanTuru] ?? PLAN_ILK_IHALE_GUNU.ucretsiz}`}
+              value={form.sureGun} onChange={(e) => guncelle("sureGun", e.target.value)}
+              className={`w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${hataSinifi("sureGun")}`}
             />
+            <AlanHatasi alan="sureGun" eksikAlanlar={eksikAlanlar} />
             <p className="text-xs text-amber-600 mt-1">
               {planTuru === "ucretsiz"
                 ? `Ücretsiz planda en fazla ${PLAN_ILK_IHALE_GUNU.ucretsiz} gün seçilebilir.`
@@ -688,7 +822,8 @@ export default function IhaleOlustur() {
                   } gün seçilebilir.`}
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              İdeal ihale süresi, başlangıç tarihinden itibaren 20-30 gün arasıdır.
+              Geri sayım, ihaleniz admin onayından geçip yayına girdiği andan itibaren başlar —
+              admin incelemesi süresince bu gün sayısı kullanılmaz.
             </p>
           </div>
 
@@ -700,7 +835,7 @@ export default function IhaleOlustur() {
             <p className="text-xs text-gray-400 mb-3">
               Bu bilgi yalnızca admin incelemesinde tapu belgesiyle karşılaştırma amaçlıdır.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div ref={refAta("mulkiyetDurumu")} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {MULKIYET_SECENEKLERI.map((s) => (
                 <label
                   key={s.deger}
@@ -723,6 +858,7 @@ export default function IhaleOlustur() {
                 </label>
               ))}
             </div>
+            <AlanHatasi alan="mulkiyetDurumu" eksikAlanlar={eksikAlanlar} />
 
             {form.mulkiyetDurumu === "sirket" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200">
@@ -731,20 +867,24 @@ export default function IhaleOlustur() {
                     Şirket Unvanı <span className="text-red-500">*</span>
                   </label>
                   <input
+                    ref={refAta("sirketUnvani")}
                     type="text" required placeholder="Örn: ABC İnşaat A.Ş."
                     value={form.sirketUnvani} onChange={(e) => guncelle("sirketUnvani", e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm ${hataSinifi("sirketUnvani")}`}
                   />
+                  <AlanHatasi alan="sirketUnvani" eksikAlanlar={eksikAlanlar} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">
                     Yetkili Kişi Adı <span className="text-red-500">*</span>
                   </label>
                   <input
+                    ref={refAta("yetkiliKisiAdi")}
                     type="text" required placeholder="Örn: Ahmet Yılmaz"
                     value={form.yetkiliKisiAdi} onChange={(e) => guncelle("yetkiliKisiAdi", e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm ${hataSinifi("yetkiliKisiAdi")}`}
                   />
+                  <AlanHatasi alan="yetkiliKisiAdi" eksikAlanlar={eksikAlanlar} />
                 </div>
               </div>
             )}
@@ -754,13 +894,24 @@ export default function IhaleOlustur() {
           <div className="border-t border-gray-100 pt-5">
             <h2 className="text-sm font-semibold text-gray-900 mb-4">Belgeler</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <DosyaAlani
-                label="Yapı Şartnamesi"
-                kabul=".pdf"
-                zorunlu
-                dosya={dosyalar.sartname}
-                onChange={(f) => setDosyalar((d) => ({ ...d, sartname: f }))}
-              />
+              <div ref={refAta("sartname")}>
+                <DosyaAlani
+                  label="Yapı Şartnamesi"
+                  kabul=".pdf"
+                  zorunlu
+                  dosya={dosyalar.sartname}
+                  onChange={(f) => setDosyalar((d) => ({ ...d, sartname: f }))}
+                />
+                <AlanHatasi alan="sartname" eksikAlanlar={eksikAlanlar} />
+                {ornekSartnameUrl(form.kategori) && (
+                  <a
+                    href={ornekSartnameUrl(form.kategori)!}
+                    className="text-xs font-medium text-blue-700 hover:underline mt-1.5 inline-block"
+                  >
+                    Örnek şartname indir ({form.kategori}) →
+                  </a>
+                )}
+              </div>
               <DosyaAlani
                 label="Sözleşme Tasarısı"
                 kabul=".pdf"
@@ -768,16 +919,19 @@ export default function IhaleOlustur() {
                 onChange={(f) => setDosyalar((d) => ({ ...d, sozlesme: f }))}
               />
               {form.proje === "var" && (
-                <DosyaAlani
-                  label="Bina Projesi"
-                  kabul=".pdf,.dwg"
-                  zorunlu
-                  dosya={dosyalar.proje}
-                  onChange={(f) => setDosyalar((d) => ({ ...d, proje: f }))}
-                  maksBoyutMB={40}
-                />
+                <div ref={refAta("projeDosyasi")}>
+                  <DosyaAlani
+                    label="Bina Projesi"
+                    kabul=".pdf,.dwg"
+                    zorunlu
+                    dosya={dosyalar.proje}
+                    onChange={(f) => setDosyalar((d) => ({ ...d, proje: f }))}
+                    maksBoyutMB={40}
+                  />
+                  <AlanHatasi alan="projeDosyasi" eksikAlanlar={eksikAlanlar} />
+                </div>
               )}
-              <div>
+              <div ref={refAta("tapu")}>
                 <DosyaAlani
                   label="Tapu Fotokopisi"
                   kabul=".pdf,.jpg,.jpeg"
@@ -785,6 +939,7 @@ export default function IhaleOlustur() {
                   dosya={dosyalar.tapu}
                   onChange={(f) => setDosyalar((d) => ({ ...d, tapu: f }))}
                 />
+                <AlanHatasi alan="tapu" eksikAlanlar={eksikAlanlar} />
                 <p className="text-xs text-gray-400 mt-1.5">
                   Yalnızca ihalenin gerçekliğini doğrulamak için istenir. Kimseyle paylaşılmaz;
                   yalnızca yetkili yöneticiler erişebilir.
@@ -824,18 +979,23 @@ export default function IhaleOlustur() {
           </div>
 
           {planTuru === "ucretsiz" && (
-            <label className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={otomatikSonlandirmaOnay}
-                onChange={(e) => setOtomatikSonlandirmaOnay(e.target.checked)}
-                className="mt-0.5 w-4 h-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500 flex-shrink-0"
-              />
-              <span className="text-sm text-amber-800">
-                İhale süresi dolduğunda <strong>2 gün içinde uzatma yapılmazsa</strong> ihale otomatik
-                olarak sonlandırılacaktır. Bunu onaylıyor musunuz?
-              </span>
-            </label>
+            <div ref={refAta("otomatikSonlandirmaOnay")}>
+              <label className={`flex items-start gap-3 bg-amber-50 border rounded-xl px-4 py-3 cursor-pointer ${
+                eksikAlanlar.includes("otomatikSonlandirmaOnay") ? "border-red-400 ring-1 ring-red-300" : "border-amber-200"
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={otomatikSonlandirmaOnay}
+                  onChange={(e) => setOtomatikSonlandirmaOnay(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500 flex-shrink-0"
+                />
+                <span className="text-sm text-amber-800">
+                  İhale süresi dolduğunda <strong>2 gün içinde uzatma yapılmazsa</strong> ihale otomatik
+                  olarak sonlandırılacaktır. Bunu onaylıyor musunuz?
+                </span>
+              </label>
+              <AlanHatasi alan="otomatikSonlandirmaOnay" eksikAlanlar={eksikAlanlar} />
+            </div>
           )}
 
           <div>
@@ -867,7 +1027,58 @@ export default function IhaleOlustur() {
             </Link>
           </div>
         </form>
+        </>
+        )}
       </div>
+
+      {/* Yayınlama Onay Modalı */}
+      {onayModaliAcik && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">İhaleyi yayınlamak istediğinize emin misiniz?</h2>
+            <p className="text-sm text-gray-600 mb-6">Yayınlama hakkınız kullanılacaktır.</p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setOnayModaliAcik(false)}
+                className="flex-1 border border-gray-200 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                Hayır
+              </button>
+              <button
+                type="button"
+                onClick={yayinla}
+                disabled={yukleniyor}
+                className="flex-1 bg-blue-700 text-white font-semibold py-2.5 rounded-xl hover:bg-blue-800 transition-colors disabled:opacity-60"
+              >
+                {yukleniyor ? "Yayınlanıyor..." : "Evet"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Yayınlama Başarı Modalı */}
+      {basariliModalAcik && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-gray-900 mb-2">İhaleniz başarıyla yayına alındı</h2>
+            <p className="text-sm text-gray-600 mb-6">İnceleme sürecine alındı, admin onayının ardından herkese açık listede görünecek.</p>
+            <button
+              type="button"
+              onClick={basariliModaliKapat}
+              className="w-full bg-blue-700 text-white font-semibold py-2.5 rounded-xl hover:bg-blue-800 transition-colors"
+            >
+              Tamam
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

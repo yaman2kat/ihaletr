@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { autoResizeTextarea } from "@/lib/ui";
 import type { Ihale, Belge, IncelemeDurumu } from "@/lib/types";
 
 const HIZLI_RED_SEBEPLERI = [
@@ -200,18 +201,37 @@ export default function AdminIhaleIncele() {
     setIslemYapiliyor(true);
     setHata("");
     const supabase = createClient();
+
     // durum='beklemede' iken onaylanan ihale burada 'aktif'e gecer --
     // bu adim olmadan ihale sonsuza kadar 'beklemede' kalip genel
     // listede/detay sayfasinda yanlislikla "Beklemede" gorunmeye devam
     // ederdi (durum, ihale-olustur'da hep 'beklemede' ile baslar).
     // Zaten aktif/tamamlandi/iptal olan bir ihalenin durumunu
     // etkilememesi icin yalnizca hala 'beklemede' oldugunda degistirilir.
+    //
+    // Geri sayim yayinlanma anindan (simdi) itibaren baslar: bitis_tarihi
+    // sure_gun'e gore burada yeniden hesaplanir; sonuc_aciklama_tarihi
+    // bitis_tarihi + 21 gun olarak ayni anda set edilir.
+    const ilkOnay = ihale.durum === "beklemede";
+    const yayinlanmaTarihi = new Date();
+    const bitisTarihi = new Date(yayinlanmaTarihi);
+    bitisTarihi.setDate(bitisTarihi.getDate() + (ihale.sure_gun ?? 30));
+    const sonucAciklamaTarihi = new Date(bitisTarihi);
+    sonucAciklamaTarihi.setDate(sonucAciklamaTarihi.getDate() + 21);
+    const bitisTarihiStr = bitisTarihi.toISOString().split("T")[0];
+    const sonucAciklamaTarihiStr = sonucAciklamaTarihi.toISOString().split("T")[0];
+
     const { error } = await supabase
       .from("ihaleler")
       .update({
         inceleme_durumu: "onaylandi",
         red_sebebi: null,
-        ...(ihale.durum === "beklemede" ? { durum: "aktif" } : {}),
+        ...(ilkOnay ? {
+          durum: "aktif",
+          yayinlanma_tarihi: yayinlanmaTarihi.toISOString(),
+          bitis_tarihi: bitisTarihiStr,
+          sonuc_aciklama_tarihi: sonucAciklamaTarihiStr,
+        } : {}),
       })
       .eq("id", ihale.id);
     setIslemYapiliyor(false);
@@ -220,7 +240,12 @@ export default function AdminIhaleIncele() {
       ...i,
       inceleme_durumu: "onaylandi",
       red_sebebi: null,
-      durum: i.durum === "beklemede" ? "aktif" : i.durum,
+      ...(ilkOnay ? {
+        durum: "aktif" as const,
+        yayinlanma_tarihi: yayinlanmaTarihi.toISOString(),
+        bitis_tarihi: bitisTarihiStr,
+        sonuc_aciklama_tarihi: sonucAciklamaTarihiStr,
+      } : {}),
     } : i));
     setRedFormuAcik(false);
 
@@ -413,13 +438,20 @@ export default function AdminIhaleIncele() {
       {/* İnceleme Aksiyonları */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
         <h2 className="text-sm font-bold text-gray-900 mb-4">İnceleme Kararı</h2>
+        {durum === "onaylandi" || durum === "reddedildi" ? (
+          <span className={`inline-block text-sm font-bold px-4 py-2 rounded-xl ${
+            durum === "onaylandi" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
+          }`}>
+            {durum === "onaylandi" ? "Onaylandı ✓" : "Reddedildi ✗"}
+          </span>
+        ) : (
         <div className="flex gap-3 mb-4">
           <button
             onClick={onayla}
-            disabled={islemYapiliyor || durum === "onaylandi"}
+            disabled={islemYapiliyor}
             className="flex-1 bg-green-600 text-white font-semibold py-2.5 rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {durum === "onaylandi" ? "Onaylandı ✓" : "Onayla"}
+            Onayla
           </button>
           <button
             onClick={() => setRedFormuAcik((v) => !v)}
@@ -429,8 +461,9 @@ export default function AdminIhaleIncele() {
             Reddet
           </button>
         </div>
+        )}
 
-        {redFormuAcik && (
+        {durum === "beklemede" && redFormuAcik && (
           <form onSubmit={reddet} className="border-t border-gray-100 pt-4">
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Red Sebebi <span className="text-red-500">*</span>
@@ -453,6 +486,7 @@ export default function AdminIhaleIncele() {
               placeholder="Örn: Yüklenen tapu belgesindeki isim başvuru sahibiyle eşleşmiyor... (yukarıdan hazır bir sebep seçip üzerine ekleme de yapabilirsiniz)"
               value={redSebebi}
               onChange={(e) => setRedSebebi(e.target.value)}
+              onInput={autoResizeTextarea}
               className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none text-sm mb-3"
             />
             <button

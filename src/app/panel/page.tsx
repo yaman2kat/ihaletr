@@ -81,6 +81,7 @@ export default function PanelSayfasi() {
   const router      = useRouter();
   const [kullanici,  setKullanici]  = useState<User | null | undefined>(undefined);
   const [hesapTuru,  setHesapTuru]  = useState<HesapTuru>("arsa_sahibi");
+  const [adminMi,    setAdminMi]    = useState(false);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [herIkisiSekme, setHerIkisiSekme] = useState<HerIkisiSekme>("arsa_sahibi");
 
@@ -92,8 +93,9 @@ export default function PanelSayfasi() {
       if (!session?.user) { router.replace("/giris"); return; }
       setKullanici(session.user);
 
-      const { data } = await supabase.from("kullanicilar").select("hesap_turu").eq("id", session.user.id).single();
+      const { data } = await supabase.from("kullanicilar").select("hesap_turu, rol").eq("id", session.user.id).single();
       setHesapTuru((data?.hesap_turu as HesapTuru) ?? "arsa_sahibi");
+      setAdminMi(data?.rol === "admin");
 
       setYukleniyor(false);
     }
@@ -130,8 +132,18 @@ export default function PanelSayfasi() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Panelim</h1>
           <p className="text-gray-500 text-sm mt-0.5">{kullanici?.email}</p>
+          <Link href="/panel/hesap-bilgilerim" className="text-xs text-blue-600 hover:underline font-medium">
+            Hesap Bilgilerim →
+          </Link>
         </div>
-        {gorunenPanel === "arsa_sahibi" && (
+        {adminMi ? (
+          <Link
+            href="/admin"
+            className="flex items-center gap-2 bg-gray-900 text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-gray-800 transition-colors text-sm"
+          >
+            Yönetim Paneline Git →
+          </Link>
+        ) : gorunenPanel === "arsa_sahibi" && (
           <Link
             href="/ihale-olustur"
             className="flex items-center gap-2 bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-800 transition-colors text-sm"

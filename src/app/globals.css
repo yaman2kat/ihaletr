@@ -16,3 +16,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
+
+/* Uzun/kesiksiz metinlerin (ör. tek kelimelik uzun açıklama) input/textarea
+   dışına taşmasını önler; textarea'lar satır sonlarını korur. */
+input, textarea, select {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+textarea {
+  white-space: pre-wrap;
+}

@@ -50,6 +50,8 @@ export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Pro
   const [kullanici,   setKullanici]   = useState<User | null | undefined>(undefined);
   const [kalanHak,    setKalanHak]    = useState<number | null>(null);
   const [hakYuklendi, setHakYuklendi] = useState(false);
+  const [kimlikOnaylandi, setKimlikOnaylandi] = useState<boolean | null>(null);
+  const [adminMi, setAdminMi] = useState(false);
   const [tutar,       setTutar]       = useState("");
   const [teklifDosyasi,   setTeklifDosyasi]   = useState<File | null>(null);
   const [alternatifProje, setAlternatifProje] = useState<File | null>(null);
@@ -65,10 +67,12 @@ export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Pro
     async function hakGetir(userId: string) {
       const { data } = await supabase
         .from("kullanicilar")
-        .select("kalan_teklif_hakki")
+        .select("kalan_teklif_hakki, kimlik_dogrulama_durumu, rol")
         .eq("id", userId)
         .single();
       setKalanHak(data?.kalan_teklif_hakki ?? 0);
+      setKimlikOnaylandi((data?.kimlik_dogrulama_durumu ?? "bekliyor") === "onaylandi");
+      setAdminMi(data?.rol === "admin");
       setHakYuklendi(true);
     }
 
@@ -239,6 +243,25 @@ export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Pro
   // Yükleniyor
   if (kullanici === undefined || !hakYuklendi) {
     return <div className="h-12 bg-gray-100 rounded-lg animate-pulse mb-3" />;
+  }
+
+  // Admin hesapları teklif veremez -- bunun yerine Yönetim Paneli'ni kullanır.
+  if (adminMi) return null;
+
+  // Kimlik doğrulaması tamamlanmamış girişli kullanıcı → teklif veremez
+  if (kullanici && kimlikOnaylandi === false) {
+    return (
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-3 text-center">
+        <p className="text-sm font-semibold text-blue-900 mb-1">Kimlik doğrulamanızı tamamlayın</p>
+        <p className="text-xs text-blue-700 mb-3">Teklif verebilmek için önce kimlik/kurum doğrulamanızı tamamlamanız gerekir.</p>
+        <Link
+          href="/onboarding"
+          className="inline-block bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg hover:bg-blue-800 transition-colors text-sm"
+        >
+          Kimlik Doğrulamaya Git →
+        </Link>
+      </div>
+    );
   }
 
   // Teklif hakkı yok → paket satın al

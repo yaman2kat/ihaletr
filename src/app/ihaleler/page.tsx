@@ -116,22 +116,33 @@ function IhalelerIcerik() {
   // katmani saglar (bkz. ihale_gorunurluk_migration.sql).
   useEffect(() => {
     const supabase = createClient();
-    supabase
-      .from("ihaleler")
-      .select("*")
-      .eq("inceleme_durumu", "onaylandi")
-      .order("created_at", { ascending: false })
-      .then(async ({ data }) => {
-        const ihaleler = (data ?? []) as Ihale[];
-        setDbIhaleler(ihaleler);
-        const idler = ihaleler.map((i) => i.id);
-        if (idler.length > 0) {
-          const { data: sayilar } = await supabase.rpc("ihale_teklif_sayilari", { p_ihale_idler: idler });
-          setTeklifSayilari(Object.fromEntries(
-            (sayilar ?? []).map((s: { ihale_id: string; sayi: number }) => [s.ihale_id, s.sayi])
-          ));
-        }
-      });
+
+    async function yukle() {
+      const { data } = await supabase
+        .from("ihaleler")
+        .select("*")
+        .eq("inceleme_durumu", "onaylandi")
+        .order("created_at", { ascending: false });
+      const ihaleler = (data ?? []) as Ihale[];
+      setDbIhaleler(ihaleler);
+      const idler = ihaleler.map((i) => i.id);
+      if (idler.length > 0) {
+        const { data: sayilar } = await supabase.rpc("ihale_teklif_sayilari", { p_ihale_idler: idler });
+        setTeklifSayilari(Object.fromEntries(
+          (sayilar ?? []).map((s: { ihale_id: string; sayi: number }) => [s.ihale_id, s.sayi])
+        ));
+      }
+    }
+    yukle();
+
+    // Admin bir ihaleyi onaylayıp yayına aldığında (ya da mevcut bir
+    // ihale güncellendiğinde) liste sayfa yenilemeden güncellensin diye.
+    const channel = supabase
+      .channel("ihaleler-liste")
+      .on("postgres_changes", { event: "*", schema: "public", table: "ihaleler" }, () => { yukle(); })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const tumIhaleler = useMemo(() => [...dbIhaleler, ...mockIhaleler], [dbIhaleler]);

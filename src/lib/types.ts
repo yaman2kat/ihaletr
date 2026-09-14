@@ -8,6 +8,31 @@ export type HesapTuru = "arsa_sahibi" | "muteahhit" | "her_ikisi";
 
 export type MulkiyetDurumu = "tek_malik" | "hisseli" | "vekaleten" | "sirket";
 export type IncelemeDurumu = "beklemede" | "onaylandi" | "reddedildi";
+
+// hesap_turu/rol'dan bağımsız, yeni bir alan — yalnızca bireysel/kurumsal
+// kimlik doğrulama akışını (onboarding) belirler.
+export type KisiTuru = "bireysel" | "kurumsal";
+export type KimlikDogrulamaDurumu = "bekliyor" | "onaylandi" | "reddedildi";
+export type OtomatikKontrolSonucu = "otomatik_onay_bekliyor" | "manuel_inceleme";
+
+export interface KimlikDogrulamaBasvurusu {
+  id: string;
+  kullanici_id: string;
+  kisi_turu: KisiTuru;
+  ad_soyad?: string | null;
+  firma_adi?: string | null;
+  tc_kimlik_no?: string | null;
+  vergi_no?: string | null;
+  kimlik_on_url?: string | null;
+  kimlik_arka_url?: string | null;
+  selfie_url?: string | null;
+  imza_sirkuleri_url?: string | null;
+  ticaret_sicil_url?: string | null;
+  otomatik_kontrol_sonucu: OtomatikKontrolSonucu;
+  admin_karari: KimlikDogrulamaDurumu;
+  red_notu?: string | null;
+  created_at: string;
+}
 export type BelgeTuru =
   | "ruhsat" | "proje" | "sozlesme" | "denetim_raporu" | "fotograf" | "diger"
   | "tapu" | "vekaletname" | "imza_sirkuleri";
@@ -142,6 +167,9 @@ export interface Ihale {
   red_sebebi?: string | null;
   otomatik_sonlandirildi?: boolean;
   secilen_firma_id?: string | null;
+  sure_gun?: number | null;
+  yayinlanma_tarihi?: string | null;
+  sonuc_aciklama_tarihi?: string | null;
   created_at: string;
 }
 
@@ -153,6 +181,9 @@ export interface Kullanici {
   telefon: string | null;
   rol?: KullaniciRol;
   hesap_turu?: HesapTuru;
+  kisi_turu?: KisiTuru | null;
+  kimlik_dogrulama_durumu?: KimlikDogrulamaDurumu;
+  kimlik_dogrulama_notu?: string | null;
   plan_turu?: PlanTuru;
   premium_bitis_tarihi?: string | null;
   kalan_teklif_hakki?: number;
