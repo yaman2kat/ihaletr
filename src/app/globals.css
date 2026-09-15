@@ -15,10 +15,20 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  /* overflow-wrap/word-break kalıtımlıdır -- burada tanımlanması, tek
+     kelimelik uzun bir metnin (URL, boşluksuz uzun kelime vb.) herhangi
+     bir sayfadaki herhangi bir metin gösterim alanını (p, li, td, açıklama
+     kartları vb.) taşırmasını, ayrıca her elemanı tek tek işaretlemeye
+     gerek kalmadan siteye genelinde önler. Daha spesifik bir kural
+     (ör. .truncate) burayı normal şekilde ezebilir. */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
-/* Uzun/kesiksiz metinlerin (ör. tek kelimelik uzun açıklama) input/textarea
-   dışına taşmasını önler; textarea'lar satır sonlarını korur. */
+/* input/select için ayrıca (body'den miras alınmayan) taşma güvencesi;
+   textarea'lar için ek olarak: girilen satır sonları korunsun, kullanıcı
+   dikeyde yeniden boyutlandırabilsin ve kutu başlangıçta yeterince
+   büyük görünsün. */
 input, textarea, select {
   overflow-wrap: break-word;
   word-break: break-word;
@@ -26,4 +36,6 @@ input, textarea, select {
 
 textarea {
   white-space: pre-wrap;
+  resize: vertical;
+  min-height: 120px;
 }

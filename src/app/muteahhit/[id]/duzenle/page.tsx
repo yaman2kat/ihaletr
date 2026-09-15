@@ -366,7 +366,7 @@ export default function MuteahhitDuzenle() {
                 value={form.aciklama ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))}
                 placeholder="Firmanızı tanıtın, deneyimlerinizden bahsedin…"
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -422,7 +422,7 @@ export default function MuteahhitDuzenle() {
             value={form.sertifika_bilgisi ?? ""}
             onChange={(e) => setForm((f) => ({ ...f, sertifika_bilgisi: e.target.value }))}
             placeholder="ISO 9001:2015 · Müteahhitlik Yeterlik Belgesi A Sınıfı · OHSAS 18001"
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 

@@ -178,7 +178,7 @@ export default function YorumBolumu({ muteahhitId }: { muteahhitId: string }) {
             onChange={(e) => setMetin(e.target.value)}
             placeholder="Bu müteahhitle çalışma deneyiminizi paylaşın…"
             rows={3}
-            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-3"
+            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
           />
           {hata && <p className="text-red-600 text-xs mb-2">{hata}</p>}
           <button

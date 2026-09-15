@@ -162,7 +162,7 @@ export default function YeniDanishman() {
                 <textarea required rows={4}
                   placeholder="Destek uzmanının deneyimi, uzmanlık alanları ve denetim yaklaşımını kısaca açıklayın..."
                   value={form.biyografi} onChange={(e) => guncelle("biyografi", e.target.value)}
-                  className={inputCls + " resize-none"} />
+                  className={inputCls} />
               </Field>
             </div>
           </div>

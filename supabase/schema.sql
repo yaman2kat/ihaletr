@@ -543,6 +543,43 @@ GRANT EXECUTE ON FUNCTION public.ihale_duzenle_ve_tekrar_gonder(
   uuid, text, text, text, text, text, text, text, text, text, mulkiyet_durumu_tipi, text, text
 ) TO authenticated;
 
+-- Admin onay aksiyonu: geri sayım admin onayı ANINDA (NOW()) başlar,
+-- bitiş = NOW() + kullanıcının seçtiği gün sayısı. İstemci tarafında
+-- `new Date()` ile hesaplanıp gönderilmek yerine, tek yetkili kaynak
+-- olarak veritabanı seviyesinde hesaplanır (saat dilimi/clock drift
+-- tutarsızlığına kapalı).
+CREATE OR REPLACE FUNCTION public.ihale_onayla(p_ihale_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_sure_gun integer;
+  v_durum    ihale_durumu;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Bu islem icin admin yetkisi gereklidir.';
+  END IF;
+
+  SELECT sure_gun, durum INTO v_sure_gun, v_durum
+  FROM public.ihaleler
+  WHERE id = p_ihale_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Ihale bulunamadi.';
+  END IF;
+
+  UPDATE public.ihaleler
+  SET inceleme_durumu = 'onaylandi',
+      red_sebebi = NULL,
+      yayinlanma_tarihi = NOW(),
+      bitis_tarihi = (NOW() + (COALESCE(v_sure_gun, 30) || ' days')::interval)::date,
+      sonuc_aciklama_tarihi = (NOW() + (COALESCE(v_sure_gun, 30) || ' days')::interval + interval '21 days')::date,
+      durum = CASE WHEN v_durum = 'beklemede' THEN 'aktif' ELSE v_durum END,
+      updated_at = now()
+  WHERE id = p_ihale_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ihale_onayla(uuid) TO authenticated;
+
 -- ------------------------------------------------------------
 -- 3. TEKLİFLER
 -- ------------------------------------------------------------

@@ -202,51 +202,16 @@ export default function AdminIhaleIncele() {
     setHata("");
     const supabase = createClient();
 
-    // durum='beklemede' iken onaylanan ihale burada 'aktif'e gecer --
-    // bu adim olmadan ihale sonsuza kadar 'beklemede' kalip genel
-    // listede/detay sayfasinda yanlislikla "Beklemede" gorunmeye devam
-    // ederdi (durum, ihale-olustur'da hep 'beklemede' ile baslar).
-    // Zaten aktif/tamamlandi/iptal olan bir ihalenin durumunu
-    // etkilememesi icin yalnizca hala 'beklemede' oldugunda degistirilir.
-    //
-    // Geri sayim yayinlanma anindan (simdi) itibaren baslar: bitis_tarihi
-    // sure_gun'e gore burada yeniden hesaplanir; sonuc_aciklama_tarihi
-    // bitis_tarihi + 21 gun olarak ayni anda set edilir.
-    const ilkOnay = ihale.durum === "beklemede";
-    const yayinlanmaTarihi = new Date();
-    const bitisTarihi = new Date(yayinlanmaTarihi);
-    bitisTarihi.setDate(bitisTarihi.getDate() + (ihale.sure_gun ?? 30));
-    const sonucAciklamaTarihi = new Date(bitisTarihi);
-    sonucAciklamaTarihi.setDate(sonucAciklamaTarihi.getDate() + 21);
-    const bitisTarihiStr = bitisTarihi.toISOString().split("T")[0];
-    const sonucAciklamaTarihiStr = sonucAciklamaTarihi.toISOString().split("T")[0];
+    // Onay, durum='beklemede' -> 'aktif' geçişini VE geri sayımın
+    // (yayinlanma_tarihi/bitis_tarihi/sonuc_aciklama_tarihi) admin onayı
+    // ANINDA veritabanı seviyesinde (NOW() ile) hesaplanmasını tek bir
+    // RPC'de yapar -- istemci saatine/saat dilimine bağlı olmadan tutarlı
+    // bir sonuç garanti eder (bkz. ihale_onayla_now_rpc_migration.sql).
+    const { error } = await supabase.rpc("ihale_onayla", { p_ihale_id: ihale.id });
+    if (error) { setIslemYapiliyor(false); setHata("Onaylanamadı: " + error.message); return; }
 
-    const { error } = await supabase
-      .from("ihaleler")
-      .update({
-        inceleme_durumu: "onaylandi",
-        red_sebebi: null,
-        ...(ilkOnay ? {
-          durum: "aktif",
-          yayinlanma_tarihi: yayinlanmaTarihi.toISOString(),
-          bitis_tarihi: bitisTarihiStr,
-          sonuc_aciklama_tarihi: sonucAciklamaTarihiStr,
-        } : {}),
-      })
-      .eq("id", ihale.id);
+    await yukle();
     setIslemYapiliyor(false);
-    if (error) { setHata("Onaylanamadı: " + error.message); return; }
-    setIhale((i) => (i ? {
-      ...i,
-      inceleme_durumu: "onaylandi",
-      red_sebebi: null,
-      ...(ilkOnay ? {
-        durum: "aktif" as const,
-        yayinlanma_tarihi: yayinlanmaTarihi.toISOString(),
-        bitis_tarihi: bitisTarihiStr,
-        sonuc_aciklama_tarihi: sonucAciklamaTarihiStr,
-      } : {}),
-    } : i));
     setRedFormuAcik(false);
 
     fetch("/api/email/ihale-durumu", {
@@ -487,7 +452,7 @@ export default function AdminIhaleIncele() {
               value={redSebebi}
               onChange={(e) => setRedSebebi(e.target.value)}
               onInput={autoResizeTextarea}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none text-sm mb-3"
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400 text-sm mb-3"
             />
             <button
               type="submit"

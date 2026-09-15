@@ -98,7 +98,7 @@ function SatirDetay({ satir, onGuncelle }: { satir: SatirVerisi; onGuncelle: (id
         value={notMetni}
         onChange={(e) => setNotMetni(e.target.value)}
         disabled={satir.ikaz_gonderildi}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none disabled:bg-gray-100 disabled:text-gray-400 mb-3"
+        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:bg-gray-100 disabled:text-gray-400 mb-3"
       />
       {satir.ikaz_gonderildi ? (
         <p className="text-xs font-semibold text-green-700">İkaz gönderildi ✓</p>

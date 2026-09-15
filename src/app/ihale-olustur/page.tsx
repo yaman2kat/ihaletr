@@ -124,7 +124,6 @@ export default function IhaleOlustur() {
   const [hata, setHata] = useState("");
   const [belgeUyarisi, setBelgeUyarisi] = useState<string[] | null>(null);
   const [onayModaliAcik, setOnayModaliAcik] = useState(false);
-  const [basariliModalAcik, setBasariliModalAcik] = useState(false);
   const taslakYuklendiRef = useRef(false);
   const alanRef = useRef<Record<string, HTMLElement | null>>({});
 
@@ -463,13 +462,10 @@ export default function IhaleOlustur() {
       return;
     }
 
-    setBasariliModalAcik(true);
-  }
-
-  function basariliModaliKapat() {
-    setBasariliModalAcik(false);
-    router.push("/panel");
-    router.refresh();
+    // İhale başarıyla yayınlandı — kullanıcıyı beklemeden otomatik olarak
+    // ihalelerim sayfasına yönlendir; başarı mesajı orada (query param'a
+    // bağlı olarak) gösterilir.
+    router.push("/panel/ihalelerim?yayin=basarili");
   }
 
   function guncelle(alan: string, deger: string) {
@@ -600,7 +596,7 @@ export default function IhaleOlustur() {
               required rows={4} placeholder="İhale kapsamını, teknik şartları ve beklentileri açıklayın..."
               value={form.aciklama} onChange={(e) => guncelle("aciklama", e.target.value)}
               onInput={autoResizeTextarea}
-              className={`w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${hataSinifi("aciklama")}`}
+              className={`w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${hataSinifi("aciklama")}`}
             />
             <AlanHatasi alan="aciklama" eksikAlanlar={eksikAlanlar} />
           </div>
@@ -1058,27 +1054,6 @@ export default function IhaleOlustur() {
         </div>
       )}
 
-      {/* Yayınlama Başarı Modalı */}
-      {basariliModalAcik && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-lg font-bold text-gray-900 mb-2">İhaleniz başarıyla yayına alındı</h2>
-            <p className="text-sm text-gray-600 mb-6">İnceleme sürecine alındı, admin onayının ardından herkese açık listede görünecek.</p>
-            <button
-              type="button"
-              onClick={basariliModaliKapat}
-              className="w-full bg-blue-700 text-white font-semibold py-2.5 rounded-xl hover:bg-blue-800 transition-colors"
-            >
-              Tamam
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

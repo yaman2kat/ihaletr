@@ -203,7 +203,7 @@ export default function IhaleDuzenle() {
             <textarea
               required rows={4} value={form.aciklama} onChange={(e) => guncelle("aciklama", e.target.value)}
               onInput={autoResizeTextarea}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 

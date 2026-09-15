@@ -282,7 +282,7 @@ function BildirButonu({ ihaleId, teklifId }: { ihaleId: string; teklifId: string
                 placeholder="Açıklama yazın..."
                 value={aciklama}
                 onChange={(e) => setAciklama(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
             )}
 
