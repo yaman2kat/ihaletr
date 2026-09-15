@@ -99,6 +99,15 @@ export async function POST(req: NextRequest) {
     const email = user.email!;
     const db = supabaseAdmin();
 
+    // Iyzico'ya gonderilecek alici bilgileri icin gercek kullanici
+    // kaydi -- istemciden GELMEZ (ad_soyad/telefon istemci tarafindan
+    // degistirilip baska bir kimlikle odeme yapilamasin diye).
+    const { data: kullaniciKaydi } = await db
+      .from("kullanicilar")
+      .select("ad_soyad, telefon")
+      .eq("id", kullaniciId)
+      .single();
+
     // ─── Rate limit: kart deneme (card testing) korumasi ────────────────────
     const pencereBaslangici = new Date(Date.now() - RATE_LIMIT_PENCERE_DK * 60_000).toISOString();
     const { count: sonDenemeSayisi } = await db
@@ -158,6 +167,8 @@ export async function POST(req: NextRequest) {
       kart,
       kullaniciId,
       email,
+      adSoyad: kullaniciKaydi?.ad_soyad ?? email.split("@")[0],
+      telefon: kullaniciKaydi?.telefon ?? null,
       ip,
     });
 

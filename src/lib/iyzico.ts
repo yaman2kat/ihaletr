@@ -18,6 +18,8 @@ export interface OdemeIstek {
   kart: OdemeKart;
   kullaniciId: string;
   email: string;
+  adSoyad: string;
+  telefon: string | null;
   ip: string;
 }
 
@@ -32,6 +34,31 @@ export interface IyzicoCevap {
   conversationId?: string;
 }
 
+// "Ad Soyad" -> { ad, soyad }. Iyzico her ikisini de dolu ister; tek
+// kelimelik isimlerde (soyadi bos) "-" ile doldurulur.
+function isimSoyisimAyir(adSoyad: string): { ad: string; soyad: string } {
+  const parcalar = adSoyad.trim().split(/\s+/).filter(Boolean);
+  if (parcalar.length === 0) return { ad: "Musteri", soyad: "-" };
+  if (parcalar.length === 1) return { ad: parcalar[0], soyad: "-" };
+  return { ad: parcalar.slice(0, -1).join(" "), soyad: parcalar[parcalar.length - 1] };
+}
+
+// Kullanicinin kayitli telefonunu Iyzico'nun bekledigi "+90XXXXXXXXXX"
+// formatina cevirir. Format geçersiz/eksikse (telefon hic girilmemis
+// ya da beklenmeyen bir bicimde kaydedilmisse) sabit bir yer tutucuya
+// duser -- Iyzico gsmNumber alani icin gecerli bir format ister,
+// dogrulanamayan bir deger odemeyi tamamen reddettirebilir.
+function telefonFormatla(telefon: string | null | undefined): string {
+  const YER_TUTUCU = "+905000000000";
+  if (!telefon) return YER_TUTUCU;
+  const rakamlar = telefon.replace(/\D/g, "");
+  let yerel = rakamlar;
+  if (yerel.startsWith("90") && yerel.length === 12) yerel = yerel.slice(2);
+  else if (yerel.startsWith("0")) yerel = yerel.slice(1);
+  if (yerel.length !== 10) return YER_TUTUCU;
+  return `+90${yerel}`;
+}
+
 function iyzipayClient() {
   return new Iyzipay({
     apiKey:    process.env.IYZICO_API_KEY    ?? "",
@@ -43,6 +70,8 @@ function iyzipayClient() {
 export function odemeOlustur(istek: OdemeIstek): Promise<IyzicoCevap> {
   const client = iyzipayClient();
   const conversationId = `${istek.kullaniciId.slice(0, 8)}-${Date.now()}`;
+  const { ad, soyad } = isimSoyisimAyir(istek.adSoyad);
+  const gsmNumber = telefonFormatla(istek.telefon);
 
   const request = {
     locale:          "tr",
@@ -64,11 +93,14 @@ export function odemeOlustur(istek: OdemeIstek): Promise<IyzicoCevap> {
     },
     buyer: {
       id:                  istek.kullaniciId,
-      name:                istek.email.split("@")[0],
-      surname:             "Kullanici",
-      gsmNumber:           "+905000000000",
+      name:                ad,
+      surname:             soyad,
+      gsmNumber,
       email:               istek.email,
-      identityNumber:      "74300864791",
+      // Iyzico canlida musteri tipine gore TC kimlik no zorunlu degil;
+      // uygulamada gercek TC kimlik no toplanmadigindan bos/placeholder
+      // gonderilir (bkz. src/app/api/odeme/route.ts cagrisi).
+      identityNumber:      "00000000000",
       lastLoginDate:       new Date().toISOString().replace("T", " ").slice(0, 19),
       registrationDate:    "2024-01-01 00:00:00",
       registrationAddress: "Türkiye",
