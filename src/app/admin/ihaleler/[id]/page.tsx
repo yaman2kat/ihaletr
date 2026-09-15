@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { autoResizeTextarea } from "@/lib/ui";
+import { hataMesaji } from "@/lib/hata-mesaji";
 import type { Ihale, Belge, IncelemeDurumu } from "@/lib/types";
 
 const HIZLI_RED_SEBEPLERI = [
@@ -208,7 +209,7 @@ export default function AdminIhaleIncele() {
     // RPC'de yapar -- istemci saatine/saat dilimine bağlı olmadan tutarlı
     // bir sonuç garanti eder (bkz. ihale_onayla_now_rpc_migration.sql).
     const { error } = await supabase.rpc("ihale_onayla", { p_ihale_id: ihale.id });
-    if (error) { setIslemYapiliyor(false); setHata("Onaylanamadı: " + error.message); return; }
+    if (error) { setIslemYapiliyor(false); setHata(hataMesaji(error)); return; }
 
     await yukle();
     setIslemYapiliyor(false);
@@ -233,7 +234,7 @@ export default function AdminIhaleIncele() {
       .update({ inceleme_durumu: "reddedildi", red_sebebi: redSebebi.trim() })
       .eq("id", ihale.id);
     setIslemYapiliyor(false);
-    if (error) { setHata("Reddedilemedi: " + error.message); return; }
+    if (error) { setHata(hataMesaji(error)); return; }
     setIhale((i) => (i ? { ...i, inceleme_durumu: "reddedildi", red_sebebi: redSebebi.trim() } : i));
     setRedFormuAcik(false);
 

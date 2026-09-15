@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { InsaatTuru } from "@/lib/types";
+import { hataMesaji } from "@/lib/hata-mesaji";
 
 const UZMANLIKLAR: InsaatTuru[] = ["Kentsel Dönüşüm", "Kat Karşılığı", "Yapı İnşaat", "Bakım & Onarım"];
 
@@ -85,7 +86,7 @@ export default function YeniDanishman() {
     });
 
     setYukleniyor(false);
-    if (error) { setHata("Kayıt başarısız: " + error.message); return; }
+    if (error) { setHata(hataMesaji(error)); return; }
     router.push("/admin/danismanlar");
   }
 

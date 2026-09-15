@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { BildirimTercihleri, Kullanici } from "@/lib/types";
+import { hataMesaji } from "@/lib/hata-mesaji";
 
 const SECENEKLER: { alan: keyof Omit<BildirimTercihleri, "kullanici_id" | "updated_at">; baslik: string; aciklama: string }[] = [
   { alan: "yeni_teklif", baslik: "Yeni teklif alındı", aciklama: "İhalenize yeni bir teklif verildiğinde bildirim al." },
@@ -79,7 +80,7 @@ export default function BildirimAyarlari() {
     setKaydediliyor(null);
     if (error) {
       setTercihler((t) => (t ? { ...t, [alan]: !yeniDeger } : t));
-      setHata("Kaydedilemedi: " + error.message);
+      setHata(hataMesaji(error));
     }
   }
 
@@ -95,7 +96,7 @@ export default function BildirimAyarlari() {
     setKaydediliyor(null);
     if (error) {
       setEmailTercihler((t) => (t ? { ...t, [alan]: !yeniDeger } : t));
-      setHata("Kaydedilemedi: " + error.message);
+      setHata(hataMesaji(error));
     }
   }
 

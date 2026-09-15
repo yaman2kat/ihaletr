@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
 import { dosyaAdiTemizle } from "@/lib/dosya";
+import { hataMesaji } from "@/lib/hata-mesaji";
 import type { KisiTuru } from "@/lib/types";
 
 const BUCKET = "admin_belgeler_dogrulama";
@@ -133,7 +134,7 @@ export default function Onboarding() {
 
       setBasarili(true);
     } catch (err) {
-      setHata(err instanceof Error ? err.message : "Başvuru gönderilemedi.");
+      setHata(hataMesaji(err));
     } finally {
       setGonderiliyor(false);
     }

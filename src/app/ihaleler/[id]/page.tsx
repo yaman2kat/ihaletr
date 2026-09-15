@@ -104,6 +104,10 @@ export default async function IhaleDetay({
   if (dbIhale) {
     const { data: sayi } = await supabase.rpc("ihale_teklif_sayisi", { p_ihale_id: id });
     teklifSayisi = sayi ?? 0;
+    // Görüntülenme sayacı -- sayfa her açıldığında atomik olarak artar
+    // (bkz. goruntulenme_sayaci_migration.sql). Bu görüntüleme, ekranda
+    // gösterilen sayıya dahil değildir (bir sonraki ziyarette görünür).
+    await supabase.rpc("ihale_goruntulenme_arttir", { p_ihale_id: id });
   }
 
   return (
@@ -326,6 +330,7 @@ export default async function IhaleDetay({
                 kategori={ihale.kategori}
                 durum={ihale.durum}
                 kalanGun={kalanGun}
+                olusturanId={ihale.olusturan_id}
               />
             </div>
 

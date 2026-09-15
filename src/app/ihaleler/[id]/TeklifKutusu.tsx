@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
 import { dosyaAdiTemizle } from "@/lib/dosya";
+import { hataMesaji } from "@/lib/hata-mesaji";
 import type { User } from "@supabase/supabase-js";
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
   kategori: string;
   durum: string;
   kalanGun: number;
+  olusturanId: string | null | undefined;
 }
 
 const TEKLIF_DOSYALARI_BUCKET = "ihale-teklif-dosyalari";
@@ -43,7 +45,7 @@ function hakRenk(hak: number): string {
   return "text-green-600";
 }
 
-export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Props) {
+export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun, olusturanId }: Props) {
   const router = useRouter();
   const taslakAnahtari = `teklif-taslak-${ihaleId}`;
   const paraliMi = NAKIT_KATEGORILER.has(kategori);
@@ -112,6 +114,10 @@ export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Pro
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (kullanici && olusturanId && kullanici.id === olusturanId) {
+      setHata("Kendi ihalenize teklif veremezsiniz.");
+      return;
+    }
     if (paraliMi && !tutar) return;
     if (!paraliMi && !teklifDosyasi) {
       setHata("Bu ihale türünde net rakam yerine teklif dosyanızı yüklemeniz gerekir.");
@@ -161,7 +167,7 @@ export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Pro
       }
     } catch (err) {
       setYukleniyor(false);
-      setHata(err instanceof Error ? err.message : "Dosya yüklenemedi.");
+      setHata(hataMesaji(err));
       return;
     }
 
@@ -185,7 +191,7 @@ export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Pro
         setHata("Teklif hakkınız kalmadı.");
         setKalanHak(0);
       } else {
-        setHata("Teklif gönderilemedi: " + error.message);
+        setHata(hataMesaji(error));
       }
       return;
     }
@@ -248,6 +254,15 @@ export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Pro
 
   // Admin hesapları teklif veremez -- bunun yerine Yönetim Paneli'ni kullanır.
   if (adminMi) return null;
+
+  // İhale sahibi kendi ihalesine teklif veremez -- form hiç gösterilmez.
+  if (kullanici && olusturanId && kullanici.id === olusturanId) {
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-3 text-center text-sm text-gray-500">
+        Kendi ihalenize teklif veremezsiniz.
+      </div>
+    );
+  }
 
   // Kimlik doğrulaması tamamlanmamış girişli kullanıcı → teklif veremez
   if (kullanici && kimlikOnaylandi === false) {

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import type { MuteahhitYorum } from "@/lib/types";
 import { mockMuteahhitYorumlar } from "@/lib/mock-data";
+import { hataMesaji } from "@/lib/hata-mesaji";
 
 function formatTarih(tarih: string) {
   return new Date(tarih).toLocaleDateString("tr-TR", {
@@ -133,7 +134,7 @@ export default function YorumBolumu({ muteahhitId }: { muteahhitId: string }) {
       setHata(
         error.code === "42501" || error.message?.toLowerCase().includes("row-level security")
           ? "Yalnızca daha önce bu müteahhitle ihale üzerinden çalışmış (teklifi kabul edilmiş) kullanıcılar değerlendirme bırakabilir."
-          : "Değerlendirme gönderilemedi: " + error.message
+          : hataMesaji(error)
       );
       return;
     }

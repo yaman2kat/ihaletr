@@ -30,6 +30,7 @@ import {
 import { ihaleSonucExcelOlustur } from "@/lib/ihale-sonuc-excel";
 import { ihaleSonucWordOlustur } from "@/lib/ihale-sonuc-word";
 import { ihaleSonucPdfDosyasiOlustur } from "@/lib/ihale-sonuc-pdf";
+import { hataMesaji } from "@/lib/hata-mesaji";
 
 interface Props {
   ihale: {
@@ -233,7 +234,7 @@ function BildirButonu({ ihaleId, teklifId }: { ihaleId: string; teklifId: string
       aciklama: aciklama.trim() || null,
     });
     setGonderiliyor(false);
-    if (error) { setHata("Bildirim gönderilemedi: " + error.message); return; }
+    if (error) { setHata(hataMesaji(error)); return; }
     setBildirildi(true);
     setAcikMi(false);
   }
@@ -337,7 +338,7 @@ function SecVeKapatButonu({
       .eq("id", ihaleId);
     setGonderiliyor(false);
 
-    if (error) { setHata("İşlem başarısız: " + error.message); return; }
+    if (error) { setHata(hataMesaji(error)); return; }
     onKapatildi(kullaniciId, tutar);
   }
 

@@ -155,6 +155,21 @@ export async function gonderSureUyarisiEmaili(opts: {
   await gonder(opts.to, `Süre dolmak üzere — ${opts.ihaleBaslik}`, html);
 }
 
+// 6b) Süre dolmadan 48 saat önce uyarı (o ihaleye teklif vermiş müteahhide)
+export async function gonderMuteahhitSureUyarisiEmaili(opts: {
+  to: string; adSoyad: string; ihaleBaslik: string; ihaleId: string;
+}) {
+  const html = sablon({
+    baslik: "Teklif verdiğiniz ihalenin süresi dolmak üzere",
+    govdeHtml: `
+      <p>Merhaba ${opts.adSoyad},</p>
+      <p>Teklif verdiğiniz <strong>${opts.ihaleBaslik}</strong> ihalesi için son 48 saat kaldı.</p>`,
+    ctaMetin: "İhaleyi Görüntüle",
+    ctaLink: `${siteUrl()}/ihaleler/${opts.ihaleId}`,
+  });
+  await gonder(opts.to, `Son 48 saat — ${opts.ihaleBaslik}`, html);
+}
+
 // 7) Şüpheli/sahte teklif ikazı (admin panelinden, müteahhide)
 export async function gonderTeklifIkaziEmaili(opts: {
   to: string; adSoyad: string; ihaleBaslik: string; mesaj: string;

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
 import { autoResizeTextarea } from "@/lib/ui";
 import { dosyaAdiTemizle } from "@/lib/dosya";
+import { hataMesaji } from "@/lib/hata-mesaji";
 import { PLAN_ILK_IHALE_GUNU } from "@/lib/plan-limitleri";
 import type { Ihale, MulkiyetDurumu, PlanTuru } from "@/lib/types";
 
@@ -104,7 +105,7 @@ export default function IhaleDuzenle() {
       p_yetkili_kisi_adi: form.mulkiyetDurumu === "sirket" ? form.yetkiliKisiAdi.trim() : null,
     });
 
-    if (error) { setHata("Kaydedilemedi: " + error.message); setKaydediliyor(false); return; }
+    if (error) { setHata(hataMesaji(error)); setKaydediliyor(false); return; }
 
     // Yeni belge yüklendiyse (opsiyonel) ekle -- eski belgeler admin
     // incelemesi için silinmeden korunur, en güncel belge tarih sırasına

@@ -8,6 +8,7 @@ import DosyaAlani from "@/components/DosyaAlani";
 import { PLAN_ILK_IHALE_GUNU } from "@/lib/plan-limitleri";
 import { autoResizeTextarea } from "@/lib/ui";
 import { dosyaAdiTemizle } from "@/lib/dosya";
+import { hataMesaji } from "@/lib/hata-mesaji";
 import type { PlanTuru, MulkiyetDurumu, KisiTuru } from "@/lib/types";
 
 const ORNEK_SARTNAME_DOSYA: Record<string, string> = {
@@ -344,7 +345,7 @@ export default function IhaleOlustur() {
     if (ihaleError || !ihaleData) {
       const mesaj = ihaleError?.message?.includes("HIZ_SINIRI_ASILDI")
         ? "Kısa sürede çok fazla ihale oluşturdunuz. Lütfen bir süre sonra tekrar deneyin."
-        : "İhale oluşturulamadı: " + (ihaleError?.message ?? "Bilinmeyen hata");
+        : hataMesaji(ihaleError);
       setHata(mesaj);
       setYukleniyor(false);
       return;

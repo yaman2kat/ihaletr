@@ -103,13 +103,9 @@ function KayitForm() {
     });
 
     if (error) {
-      console.error("Kayıt hatası (tam obje):", error);
-      console.log("Kayıt hatası — error.message:", error.message, "| status:", error.status);
+      console.error("Kayıt hatası:", error);
       setYukleniyor(false);
-      const gercekMesaj = error.message && error.message.trim() && error.message !== "{}"
-        ? error.message
-        : `bilinmeyen hata${error.status ? ` — HTTP ${error.status}` : ""}`;
-      setHata(`${ceviriHata(error.message)} (${gercekMesaj})`);
+      setHata(ceviriHata(error.message ?? ""));
       return;
     }
 

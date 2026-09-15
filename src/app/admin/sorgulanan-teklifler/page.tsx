@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { TeklifBildirimi, TeklifBildirimDurumu } from "@/lib/types";
 import { SEBEP_ETIKETLERI, IKAZ_METIN_SABLONLARI } from "@/lib/teklif-ikaz";
+import { hataMesaji } from "@/lib/hata-mesaji";
 
 const TEKLIF_DOSYALARI_BUCKET = "ihale-teklif-dosyalari";
 
@@ -69,7 +70,7 @@ function SatirDetay({ satir, onGuncelle }: { satir: SatirVerisi; onGuncelle: (id
       .from("teklif_bildirimleri")
       .update({ admin_notu: notMetni })
       .eq("id", satir.id);
-    if (guncelleHata) { setGonderiliyor(false); setHata("Not kaydedilemedi: " + guncelleHata.message); return; }
+    if (guncelleHata) { setGonderiliyor(false); setHata(hataMesaji(guncelleHata)); return; }
 
     try {
       const res = await fetch("/api/email/teklif-ikazi", {
@@ -78,7 +79,7 @@ function SatirDetay({ satir, onGuncelle }: { satir: SatirVerisi; onGuncelle: (id
         body: JSON.stringify({ bildirimId: satir.id }),
       });
       const veri = await res.json();
-      if (!res.ok || veri.hata) { setHata(veri.hata ?? "İkaz gönderilemedi."); setGonderiliyor(false); return; }
+      if (!res.ok || veri.hata) { setHata(veri.hata ? hataMesaji(veri.hata) : "İkaz gönderilemedi."); setGonderiliyor(false); return; }
     } catch {
       setHata("Bağlantı hatası, lütfen tekrar deneyin.");
       setGonderiliyor(false);

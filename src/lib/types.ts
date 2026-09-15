@@ -170,6 +170,7 @@ export interface Ihale {
   sure_gun?: number | null;
   yayinlanma_tarihi?: string | null;
   sonuc_aciklama_tarihi?: string | null;
+  son_uyari_gonderildi?: string | null;
   created_at: string;
 }
 
@@ -244,7 +245,8 @@ export interface DavetKullanimLogu {
 export type BildirimTuru =
   | "yeni_teklif" | "ihale_onaylandi" | "ihale_reddedildi"
   | "ihale_otomatik_sonlandi" | "davet_odulu" | "odeme_sorunu" | "bolge_eslesmesi"
-  | "ihale_kapatildi" | "ihale_kazanildi" | "ihale_kaybedildi" | "davet_limit_asildi" | "teklif_ikazi";
+  | "ihale_kapatildi" | "ihale_kazanildi" | "ihale_kaybedildi" | "davet_limit_asildi" | "teklif_ikazi"
+  | "sure_uyarisi";
 
 export interface Bildirim {
   id: string;

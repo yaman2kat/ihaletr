@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { mockYorumlar } from "@/lib/mock-data";
+import { hataMesaji } from "@/lib/hata-mesaji";
 import type { DanishmanYorum } from "@/lib/types";
 
 // ─── Yıldız bileşeni ────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ export default function YorumBolumu({ danishmanId }: Props) {
     setGonderiyor(false);
 
     if (error) {
-      setHata("Yorum gönderilemedi: " + error.message);
+      setHata(hataMesaji(error));
     } else {
       setBasari(true);
       setPuan(0); setMetin(""); setFormGoster(false);

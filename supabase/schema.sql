@@ -355,6 +355,10 @@ CREATE TABLE public.ihaleler (
   sure_gun               integer,
   yayinlanma_tarihi      timestamptz,
   sonuc_aciklama_tarihi  date,
+  -- 48 saat kala site-ici + e-posta uyarisinin tekrar gonderilmesini
+  -- engelleyen zaman damgasi (bkz. /api/cron/sure-uyarisi). NULL iken
+  -- henuz uyari gonderilmemis demektir.
+  son_uyari_gonderildi   timestamptz,
   created_at        timestamptz   NOT NULL DEFAULT now(),
   updated_at        timestamptz   NOT NULL DEFAULT now(),
 
@@ -601,11 +605,51 @@ CREATE INDEX idx_teklifler_kullanici ON public.teklifler(kullanici_id);
 
 ALTER TABLE public.teklifler ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Ihale sahibi ve teklif sahibi teklifleri gorebilir"
+-- Teklif sahibi HER ZAMAN kendi teklifini gorur; ihale sahibi ise
+-- SADECE ihale bittiginde (tamamlandi ya da suresi gecmis aktif)
+-- tum teklifleri gorebilir -- ihale devam ederken kimse (sahibi dahil)
+-- kim ne kadar teklif verdigini goremez (bkz. teklif_gizliligi_migration.sql).
+CREATE POLICY "Teklif sahibi her zaman, ihale sahibi yalnizca ihale bitince gorebilir"
   ON public.teklifler FOR SELECT USING (
     auth.uid() = kullanici_id
-    OR auth.uid() = (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
+    OR (
+      auth.uid() = (SELECT olusturan_id FROM public.ihaleler WHERE id = ihale_id)
+      AND EXISTS (
+        SELECT 1 FROM public.ihaleler i WHERE i.id = ihale_id
+          AND (i.durum = 'tamamlandi' OR (i.durum = 'aktif' AND i.bitis_tarihi < CURRENT_DATE))
+      )
+    )
   );
+
+-- Herkese acik (anon dahil) teklif SAYISI -- kimlik/tutar icermez, RLS'i
+-- SECURITY DEFINER ile bilincli olarak atlar.
+CREATE OR REPLACE FUNCTION public.ihale_teklif_sayisi(p_ihale_id uuid)
+RETURNS integer LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT count(*)::integer FROM public.teklifler WHERE ihale_id = p_ihale_id;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ihale_teklif_sayisi(uuid) TO anon, authenticated;
+
+-- Coklu ihale icin tek sorguda sayi (filtre/siralama sayfasi ve panel
+-- listeleri icin -- N ayri RPC cagrisi yerine).
+CREATE OR REPLACE FUNCTION public.ihale_teklif_sayilari(p_ihale_idler uuid[])
+RETURNS TABLE(ihale_id uuid, sayi integer) LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT t.ihale_id, count(*)::integer AS sayi
+  FROM public.teklifler t
+  WHERE t.ihale_id = ANY(p_ihale_idler)
+  GROUP BY t.ihale_id;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ihale_teklif_sayilari(uuid[]) TO anon, authenticated;
+
+-- İhale detay sayfası her ziyaret edildiğinde goruntulenme_sayisi'ni
+-- atomik olarak +1 artırır (bkz. goruntulenme_sayaci_migration.sql).
+CREATE OR REPLACE FUNCTION public.ihale_goruntulenme_arttir(p_ihale_id uuid)
+RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  UPDATE public.ihaleler SET goruntulenme_sayisi = goruntulenme_sayisi + 1 WHERE id = p_ihale_id;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ihale_goruntulenme_arttir(uuid) TO anon, authenticated;
 
 CREATE POLICY "Giris yapan teklif verebilir"
   ON public.teklifler FOR INSERT WITH CHECK (
@@ -949,7 +993,8 @@ ALTER TABLE public.kullanicilar
   ADD COLUMN IF NOT EXISTS email_ihale_durumu     boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS email_davet_odulu      boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS email_odeme_sorunu     boolean NOT NULL DEFAULT true,
-  ADD COLUMN IF NOT EXISTS email_bolge_eslesmesi  boolean NOT NULL DEFAULT true;
+  ADD COLUMN IF NOT EXISTS email_bolge_eslesmesi  boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS email_sure_uyarisi     boolean NOT NULL DEFAULT true;
 
 -- Teklif eklenince kalan hakkı azalt ve toplam sayıyı artır
 -- 99999+ değer sınırsız paket göstergesidir (Pro)
@@ -1048,6 +1093,7 @@ BEGIN
     WHERE id = p_ihale_id
       AND olusturan_id = auth.uid()
       AND durum = 'aktif'
+      AND inceleme_durumu = 'onaylandi'
       AND bitis_tarihi >= CURRENT_DATE
   ) THEN
     RAISE EXCEPTION 'Bu ihale size ait aktif bir ihale degil ya da suresi zaten dolmus.';
@@ -1075,6 +1121,69 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.ihale_suresini_uzat(uuid, integer) TO authenticated;
+
+-- Kurumsal plan: Premium'un aksine bir havuzdan degil, ihalenin
+-- kendi elapsed-day tavanindan (toplam en fazla 30 gun) dusulerek
+-- uzatilir. Sahiplik + aktiflik + plan kontrolu SECURITY DEFINER
+-- icinde bagimsiz olarak garanti edilir -- admin ya da baska hicbir
+-- kullanici (arayuzde buton hic gorunmese bile) bu RPC'yi baskasinin
+-- ihalesi icin cagiramaz.
+CREATE OR REPLACE FUNCTION public.ihale_uzat_kurumsal(
+  p_ihale_id uuid,
+  p_gun      integer
+)
+RETURNS date LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_ihale           public.ihaleler%ROWTYPE;
+  v_plan_turu       text;
+  v_gecen_gun       integer;
+  v_kalan_hak       integer;
+  v_yeni_tarih      date;
+  -- src/lib/plan-limitleri.ts > PLAN_EKSTRA_UZATMA_GUNU.kurumsal ile
+  -- senkron tutulmali.
+  v_kurumsal_limit CONSTANT integer := 30;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Giris yapmalisiniz.';
+  END IF;
+
+  IF p_gun IS NULL OR p_gun <= 0 THEN
+    RAISE EXCEPTION 'Gecerli bir gun sayisi girin.';
+  END IF;
+
+  SELECT * INTO v_ihale FROM public.ihaleler
+  WHERE id = p_ihale_id
+    AND olusturan_id = auth.uid()
+    AND durum = 'aktif'
+    AND inceleme_durumu = 'onaylandi'
+    AND bitis_tarihi >= CURRENT_DATE
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Bu ihale size ait aktif bir ihale degil ya da suresi zaten dolmus.';
+  END IF;
+
+  SELECT plan_turu INTO v_plan_turu FROM public.kullanicilar WHERE id = auth.uid();
+  IF v_plan_turu IS DISTINCT FROM 'kurumsal' THEN
+    RAISE EXCEPTION 'Bu islem yalnizca Kurumsal plan icin gecerlidir.';
+  END IF;
+
+  v_gecen_gun := v_ihale.bitis_tarihi - v_ihale.baslangic_tarihi;
+  v_kalan_hak := GREATEST(0, v_kurumsal_limit - v_gecen_gun);
+  IF p_gun > v_kalan_hak THEN
+    RAISE EXCEPTION 'UZATMA_LIMITI_ASILDI: En fazla % gun uzatabilirsiniz.', v_kalan_hak;
+  END IF;
+
+  UPDATE public.ihaleler
+  SET bitis_tarihi = bitis_tarihi + p_gun, updated_at = now()
+  WHERE id = p_ihale_id
+  RETURNING bitis_tarihi INTO v_yeni_tarih;
+
+  RETURN v_yeni_tarih;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ihale_uzat_kurumsal(uuid, integer) TO authenticated;
 
 -- ------------------------------------------------------------
 -- 8. MÜTEAHHİT PROFİLLER
@@ -1671,7 +1780,10 @@ CREATE TABLE public.bildirimler (
   kullanici_id uuid        NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
   tur          text        NOT NULL CHECK (tur IN (
                   'yeni_teklif', 'ihale_onaylandi', 'ihale_reddedildi',
-                  'ihale_otomatik_sonlandi', 'davet_odulu', 'odeme_sorunu'
+                  'ihale_otomatik_sonlandi', 'davet_odulu', 'odeme_sorunu',
+                  'bolge_eslesmesi', 'ihale_kapatildi', 'ihale_kazanildi',
+                  'ihale_kaybedildi', 'davet_limit_asildi', 'teklif_ikazi',
+                  'sure_uyarisi'
                 )),
   baslik       text        NOT NULL,
   mesaj        text        NOT NULL,

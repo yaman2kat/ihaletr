@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { hataMesaji } from "@/lib/hata-mesaji";
 
 export default function SifreSifirla() {
   const router = useRouter();
@@ -62,7 +63,7 @@ export default function SifreSifirla() {
 
     if (error) {
       console.error("Şifre güncelleme hatası:", error);
-      setHata("Şifre güncellenemedi: " + error.message);
+      setHata(error.message?.includes("Password should be") ? "Şifre en az 8 karakter olmalıdır." : hataMesaji(error));
       setYukleniyor(false);
       return;
     }

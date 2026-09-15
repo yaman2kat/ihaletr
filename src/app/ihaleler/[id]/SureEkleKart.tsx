@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { PlanTuru } from "@/lib/types";
-import { PLAN_UZATMA_LIMITI, gunFarki, tarihiGunEkleyerekUzat, formatTarih } from "@/lib/ihale-sonuc";
+import { PLAN_UZATMA_LIMITI, gunFarki, formatTarih } from "@/lib/ihale-sonuc";
+import { hataMesaji } from "@/lib/hata-mesaji";
 
 interface Props {
   ihaleId: string;
@@ -99,7 +100,7 @@ export default function SureEkleKart({ ihaleId, olusturanId, durum, incelemeDuru
         setHata(
           error.message?.includes("UZATMA_HAVUZU_YETERSIZ")
             ? "Uzatma havuzunuzda yeterli gün yok."
-            : "İhale uzatılamadı: " + error.message
+            : hataMesaji(error)
         );
         return;
       }
@@ -109,29 +110,27 @@ export default function SureEkleKart({ ihaleId, olusturanId, durum, incelemeDuru
       return;
     }
 
-    // Kurumsal: dogrudan client update. durum + bitis_tarihi>bugun
-    // eslesme kontrolu -- ihale, form doldurulurken pg_cron tarafindan
-    // zaten otomatik sonlandirilmis ya da suresi gecmis olabilir; bu
-    // durumda uzatma sessizce reddedilir, "ihale bittikten sonra hicbir
-    // sekilde uzatma yapilamaz" kurali sunucu tarafinda da garanti edilir.
+    // Kurumsal: SECURITY DEFINER RPC uzerinden -- sahiplik, aktiflik ve
+    // elapsed-day tavani sunucu tarafinda tekrar dogrulanir (RLS'yi
+    // atlayan admin gibi baska bir UPDATE politikasi olsa bile bu yolu
+    // kotuye kullanamaz, cunku RPC kendi icinde olusturan_id=auth.uid()
+    // sartini ayrica kontrol eder).
     if (eklenecekGun > kurumsalKalanHak) { setHata(`En fazla ${kurumsalKalanHak} gün uzatabilirsiniz.`); setGonderiliyor(false); return; }
-    const yeniBitisTarihi = tarihiGunEkleyerekUzat(bitisTarihi, eklenecekGun);
-    const bugunIso = new Date().toISOString().split("T")[0];
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("ihaleler")
-      .update({ bitis_tarihi: yeniBitisTarihi })
-      .eq("id", ihaleId)
-      .eq("durum", "aktif")
-      .gt("bitis_tarihi", bugunIso)
-      .select("id");
+    const { data, error } = await supabase.rpc("ihale_uzat_kurumsal", {
+      p_ihale_id: ihaleId,
+      p_gun: eklenecekGun,
+    });
     setGonderiliyor(false);
-    if (error) { setHata("İhale uzatılamadı: " + error.message); return; }
-    if (!data || data.length === 0) {
-      setHata("Bu ihale artık aktif değil — süresi dolmuş olabilir, uzatılamaz.");
+    if (error) {
+      setHata(
+        error.message?.includes("UZATMA_LIMITI_ASILDI")
+          ? `En fazla ${kurumsalKalanHak} gün uzatabilirsiniz.`
+          : hataMesaji(error)
+      );
       return;
     }
-    setBasariliTarih(yeniBitisTarihi);
+    setBasariliTarih(data as string);
     router.refresh();
   }
 

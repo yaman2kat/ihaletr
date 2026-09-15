@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { mockDanishmanlar } from "@/lib/mock-data";
 import type { Danishman } from "@/lib/types";
+import { hataMesaji } from "@/lib/hata-mesaji";
 
 export default function AdminDanismanlar() {
   const [liste, setListe]         = useState<Danishman[]>([]);
@@ -35,7 +36,7 @@ export default function AdminDanismanlar() {
     const supabase = createClient();
     const { error } = await supabase.from("danismanlar").delete().eq("id", id);
     if (error) {
-      setHata("Silme işlemi başarısız: " + error.message);
+      setHata(hataMesaji(error));
     } else {
       await yukle();
     }

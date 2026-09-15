@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { hataMesaji } from "@/lib/hata-mesaji";
 
 // ─── Paket bilgileri ──────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ export default function OdemeSayfasi({ params }: { params: Promise<{ paket: stri
       const veri = await res.json();
 
       if (!res.ok || !veri.basarili) {
-        setHata(veri.hata ?? "Ödeme işlemi başarısız oldu.");
+        setHata(veri.hata ? hataMesaji(veri.hata) : "Ödeme işlemi başarısız oldu.");
         setYukleniyor(false);
         return;
       }
