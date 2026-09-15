@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
+import { dosyaAdiTemizle } from "@/lib/dosya";
 import type { KisiTuru } from "@/lib/types";
 
 const BUCKET = "admin_belgeler_dogrulama";
@@ -91,7 +92,7 @@ export default function Onboarding() {
 
     const dosyaYukle = async (dosya: File | null, etiket: string): Promise<string | null> => {
       if (!dosya) return null;
-      const yol = `${kullaniciId}/${etiket}-${Date.now()}-${dosya.name}`;
+      const yol = `${kullaniciId}/${etiket}-${Date.now()}-${dosyaAdiTemizle(dosya.name)}`;
       const { error } = await supabase.storage.from(BUCKET).upload(yol, dosya, { upsert: false });
       if (error) throw new Error(`${etiket} yüklenemedi: ${error.message}`);
       return yol;

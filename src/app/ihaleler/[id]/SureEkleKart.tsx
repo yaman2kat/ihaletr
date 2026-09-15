@@ -11,6 +11,7 @@ interface Props {
   ihaleId: string;
   olusturanId: string | null | undefined;
   durum: string;
+  incelemeDurumu: string | null | undefined;
   baslangicTarihi: string;
   bitisTarihi: string;
 }
@@ -27,8 +28,13 @@ interface Props {
 // Premium: 45 günlük dağıtılabilir uzatma havuzundan gün düşer (RPC).
 // Kurumsal: eski elapsed-day tavanlı mantık (PLAN_UZATMA_LIMITI),
 // doğrudan client update ile.
-export default function SureEkleKart({ ihaleId, olusturanId, durum, baslangicTarihi, bitisTarihi }: Props) {
+export default function SureEkleKart({ ihaleId, olusturanId, durum, incelemeDurumu, baslangicTarihi, bitisTarihi }: Props) {
   const router = useRouter();
+  // Baslangicta ve her ihaleId/olusturanId degisiminde (ör. bir listeden
+  // baska bir ihaleye client-side gecis yapildiginda) ONCE "false"a
+  // (gizli) donulur, ancak async kontrol sonuclanana kadar bir onceki
+  // ihalenin sahiplik durumu (true) UI'da bir an icin kalip -- gecici de
+  // olsa -- butonu baskasinin ihalesinde yanlislikla gostermesin diye.
   const [sahibiMi, setSahibiMi] = useState<boolean | null>(null);
   const [planTuru, setPlanTuru] = useState<PlanTuru | null>(null);
   const [havuz, setHavuz] = useState<number>(0);
@@ -38,6 +44,7 @@ export default function SureEkleKart({ ihaleId, olusturanId, durum, baslangicTar
   const [basariliTarih, setBasariliTarih] = useState<string | null>(null);
 
   useEffect(() => {
+    setSahibiMi(false);
     const supabase = createClient();
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user || session.user.id !== olusturanId) {
@@ -53,7 +60,7 @@ export default function SureEkleKart({ ihaleId, olusturanId, durum, baslangicTar
       setPlanTuru((data?.plan_turu as PlanTuru | undefined) ?? null);
       setHavuz(data?.uzatma_havuzu_gun ?? 0);
     });
-  }, [olusturanId]);
+  }, [ihaleId, olusturanId]);
 
   // Kurumsal'in elapsed-day tavanli hesaplamasi -- premium icin de
   // zararsizca hesaplanir (kullanilmaz), erken return'lerden bagimsiz
@@ -63,7 +70,11 @@ export default function SureEkleKart({ ihaleId, olusturanId, durum, baslangicTar
   const kurumsalKalanHak = Math.max(0, kurumsalPlanLimiti - gecenGun);
 
   const kalanGun = Math.ceil((new Date(bitisTarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  const halaAktifMi = durum === "aktif" && kalanGun > 0;
+  // "aktif" olsa bile inceleme_durumu 'onaylandi' degilse (normalde bu
+  // ikisi birlikte degisir, ama tek kaynaktan degil iki ayri alandan
+  // okundugu icin burada da acikca dogrulanir) ya da son tarih gecmisse
+  // buton hicbir sekilde gorunmez.
+  const halaAktifMi = durum === "aktif" && incelemeDurumu === "onaylandi" && kalanGun > 0;
 
   if (!sahibiMi || !halaAktifMi || (planTuru !== "premium" && planTuru !== "kurumsal")) {
     return null;

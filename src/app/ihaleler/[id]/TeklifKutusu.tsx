@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
+import { dosyaAdiTemizle } from "@/lib/dosya";
 import type { User } from "@supabase/supabase-js";
 
 interface Props {
@@ -145,14 +146,14 @@ export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun }: Pro
     let alternatifProjeYolu: string | null = null;
     try {
       if (teklifDosyasi) {
-        const yol = `${ihaleId}/${kullanici.id}/teklif-dosyasi-${Date.now()}-${teklifDosyasi.name}`;
+        const yol = `${ihaleId}/${kullanici.id}/teklif-dosyasi-${Date.now()}-${dosyaAdiTemizle(teklifDosyasi.name)}`;
         const { error: yukleHatasi } = await supabase.storage
           .from(TEKLIF_DOSYALARI_BUCKET).upload(yol, teklifDosyasi, { upsert: false });
         if (yukleHatasi) throw new Error("Teklif dosyası yüklenemedi: " + yukleHatasi.message);
         teklifDosyasiYolu = yol;
       }
       if (alternatifProje) {
-        const yol = `${ihaleId}/${kullanici.id}/alternatif-proje-${Date.now()}-${alternatifProje.name}`;
+        const yol = `${ihaleId}/${kullanici.id}/alternatif-proje-${Date.now()}-${dosyaAdiTemizle(alternatifProje.name)}`;
         const { error: yukleHatasi } = await supabase.storage
           .from(TEKLIF_DOSYALARI_BUCKET).upload(yol, alternatifProje, { upsert: false });
         if (yukleHatasi) throw new Error("Alternatif proje dosyası yüklenemedi: " + yukleHatasi.message);

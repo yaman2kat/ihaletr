@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
 import { PLAN_ILK_IHALE_GUNU } from "@/lib/plan-limitleri";
 import { autoResizeTextarea } from "@/lib/ui";
+import { dosyaAdiTemizle } from "@/lib/dosya";
 import type { PlanTuru, MulkiyetDurumu, KisiTuru } from "@/lib/types";
 
 const ORNEK_SARTNAME_DOSYA: Record<string, string> = {
@@ -378,7 +379,7 @@ export default function IhaleOlustur() {
       baslik: string
     ): Promise<{ baslik: string; basarili: boolean } | null> => {
       if (!dosya) return null;
-      const yol = `${ihaleData.id}/${tur}-${Date.now()}-${dosya.name}`;
+      const yol = `${ihaleData.id}/${tur}-${Date.now()}-${dosyaAdiTemizle(dosya.name)}`;
       const { data: storageData, error: storageError } = await supabase.storage
         .from("ihale-belgeleri")
         .upload(yol, dosya, { upsert: false });
@@ -412,7 +413,7 @@ export default function IhaleOlustur() {
       dosyaAdiOnEki: string
     ): Promise<{ baslik: string; basarili: boolean } | null> => {
       if (!dosya) return null;
-      const yol = `${ihaleData.id}/${dosyaAdiOnEki}-${Date.now()}-${dosya.name}`;
+      const yol = `${ihaleData.id}/${dosyaAdiOnEki}-${Date.now()}-${dosyaAdiTemizle(dosya.name)}`;
       const [{ data: storageData, error: storageError }, dosyaHash] = await Promise.all([
         supabase.storage.from("ihale-tapu-belgeleri").upload(yol, dosya, { upsert: false }),
         tur === "tapu" ? sha256Hex(dosya).catch(() => null) : Promise.resolve(null),

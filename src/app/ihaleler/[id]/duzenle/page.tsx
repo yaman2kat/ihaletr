@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import DosyaAlani from "@/components/DosyaAlani";
 import { autoResizeTextarea } from "@/lib/ui";
+import { dosyaAdiTemizle } from "@/lib/dosya";
 import { PLAN_ILK_IHALE_GUNU } from "@/lib/plan-limitleri";
 import type { Ihale, MulkiyetDurumu, PlanTuru } from "@/lib/types";
 
@@ -110,7 +111,7 @@ export default function IhaleDuzenle() {
     // göre öne çıkar.
     try {
       if (yeniSartname) {
-        const yol = `${ihale.id}/diger-${Date.now()}-${yeniSartname.name}`;
+        const yol = `${ihale.id}/diger-${Date.now()}-${dosyaAdiTemizle(yeniSartname.name)}`;
         const { error: sErr } = await supabase.storage.from("ihale-belgeleri").upload(yol, yeniSartname, { upsert: false });
         if (!sErr) {
           const { data: urlData } = supabase.storage.from("ihale-belgeleri").getPublicUrl(yol);
@@ -122,7 +123,7 @@ export default function IhaleDuzenle() {
         }
       }
       if (yeniTapu) {
-        const yol = `${ihale.id}/tapu-${Date.now()}-${yeniTapu.name}`;
+        const yol = `${ihale.id}/tapu-${Date.now()}-${dosyaAdiTemizle(yeniTapu.name)}`;
         const dosyaHash = await sha256Hex(yeniTapu).catch(() => null);
         const { error: tErr } = await supabase.storage.from("ihale-tapu-belgeleri").upload(yol, yeniTapu, { upsert: false });
         if (!tErr) {

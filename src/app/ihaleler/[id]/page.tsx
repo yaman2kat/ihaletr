@@ -334,6 +334,7 @@ export default async function IhaleDetay({
               ihaleId={ihale.id}
               olusturanId={ihale.olusturan_id}
               durum={ihale.durum}
+              incelemeDurumu={ihale.inceleme_durumu}
               baslangicTarihi={ihale.baslangic_tarihi}
               bitisTarihi={ihale.bitis_tarihi}
             />
