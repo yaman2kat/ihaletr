@@ -28,10 +28,10 @@ const INCELEME_BADGE: Record<IncelemeDurumu, { etiket: string; cls: string }> = 
   reddedildi: { etiket: "Reddedildi",  cls: "bg-red-100 text-red-600" },
 };
 
-// EslesenIhale.durum, ihaleler.durum'dur (aktif/beklemede/tamamlandi/iptal)
+// EslesenIhale.durum, ihaleler.durum'dur (aktif/beklemede/tamamlandi/iptal/arsiv)
 // -- inceleme_durumu degil -- uyari kartlarinda ayri bir etiket kullanilir.
 const IHALE_DURUM_ETIKETI: Record<string, string> = {
-  aktif: "Aktif", beklemede: "Beklemede", tamamlandi: "Tamamlandı", iptal: "İptal",
+  aktif: "Aktif", beklemede: "Beklemede", tamamlandi: "Tamamlandı", iptal: "İptal", arsiv: "Arşivlendi",
 };
 
 const OZEL_BUCKET = "ihale-tapu-belgeleri";

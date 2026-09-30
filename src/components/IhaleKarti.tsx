@@ -19,7 +19,7 @@ import IhaleSonucRaporu from "@/components/IhaleSonucRaporu";
 function rozetHesapla(ihale: Ihale, kalanGun: number): { etiket: string; cls: string } {
   if (ihale.durum === "iptal") return { etiket: "İptal", cls: "bg-red-100 text-red-800" };
 
-  const suresiDolmusMu = ihale.durum === "tamamlandi" || kalanGun <= 0;
+  const suresiDolmusMu = ihale.durum === "tamamlandi" || ihale.durum === "arsiv" || kalanGun <= 0;
   if (!suresiDolmusMu) {
     if (kalanGun < 3) return { etiket: `${kalanGun} gün kaldı`, cls: "bg-amber-100 text-amber-700" };
     return { etiket: `${kalanGun} gün kaldı`, cls: "bg-green-100 text-green-800" };
@@ -44,7 +44,7 @@ export default function IhaleKarti({ ihale }: Props) {
   const kalanGun = Math.ceil(
     (new Date(ihale.bitis_tarihi).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
-  const bittiMi = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
+  const bittiMi = ihale.durum === "tamamlandi" || ihale.durum === "arsiv" || (ihale.durum === "aktif" && kalanGun <= 0);
   const teklifler = mockIhaleTeklifleri[ihale.id] ?? [];
   const rozet = rozetHesapla(ihale, kalanGun);
 

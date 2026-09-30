@@ -25,12 +25,14 @@ const durumRenk: Record<string, string> = {
   aktif:      "bg-green-100 text-green-800",
   tamamlandi: "bg-gray-100 text-gray-700",
   iptal:      "bg-red-100 text-red-800",
+  arsiv:      "bg-purple-100 text-purple-700",
 };
 
 const durumEtiket: Record<string, string> = {
   aktif:      "Aktif",
   tamamlandi: "Tamamlandı",
   iptal:      "İptal",
+  arsiv:      "Arşivlendi",
 };
 
 export async function generateStaticParams() {
@@ -91,7 +93,7 @@ export default async function IhaleDetay({
   );
   const aktifVeDevam = ihale.durum === "aktif" && kalanGun > 0;
   // Süresi dolmuş ya da tamamlanmış ihaleler için sonuç raporu gösterilir.
-  const sonucGosterilsinMi = ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun <= 0);
+  const sonucGosterilsinMi = ihale.durum === "tamamlandi" || ihale.durum === "arsiv" || (ihale.durum === "aktif" && kalanGun <= 0);
 
   // Mock/demo ihaleler icin sabit ornek teklif listesi (gercek ihalelerde
   // teklif veren kimligi/tutari kimseye gosterilmez -- bkz. SonTeklifler,

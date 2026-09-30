@@ -43,3 +43,7 @@ next-env.d.ts
 
 # test hesap kimlik bilgileri (seed-live-test.mjs tarafindan uretilir)
 live-test-account.json
+
+# olusturulan ornek sartname .docx dosyalari (sartname-sablonlari-olustur-ve-yukle.mjs
+# tarafindan uretilir ve Supabase Storage'a yuklenir -- kaynagi icerik.mjs'dir)
+/sartname-sablonlari-ciktilar/

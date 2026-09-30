@@ -122,6 +122,7 @@ function IhalelerIcerik() {
         .from("ihaleler")
         .select("*")
         .eq("inceleme_durumu", "onaylandi")
+        .neq("durum", "arsiv")
         .order("created_at", { ascending: false });
       const ihaleler = (data ?? []) as Ihale[];
       setDbIhaleler(ihaleler);
@@ -237,14 +238,24 @@ function IhalelerIcerik() {
 
     // Kullanici ozellikle "sadece suresi dolanlar" filtrelemediyse, suresi
     // dolmus/tamamlanmis/iptal ihaleler secilen siralamadan bagimsiz olarak
-    // her zaman en altta gosterilir -- kendi aralarinda ise (secilen
-    // siralamadan bagimsiz) en yeni kapanmis once gelecek sekilde.
+    // her zaman en altta gosterilir, iki ayri grupta:
+    //  - Suresi dolmus ama kazanan secilmemis (aktif&&suresi gecmis, ya da
+    //    iptal): en yeni biten (bitis_tarihi) en ustte.
+    //  - Tamamlanmis (kazanan secilmis): en yeni tamamlanan en ustte --
+    //    bitis_tarihi DEGIL, kazanan_secim_tarihi esas alinir (bitis_tarihi
+    //    sabit ilan tarihidir, kazanan farkli bir tarihte secilmis olabilir).
     if (!(sureDolmus && !sureAktif)) {
       const aktifler = sonuc.filter((i) => !ihaleBitmisMi(i));
-      const bitmisler = sonuc
-        .filter(ihaleBitmisMi)
+      const suresiDolmusKazananYok = sonuc
+        .filter((i) => ihaleBitmisMi(i) && i.durum !== "tamamlandi")
         .sort((a, b) => new Date(b.bitis_tarihi).getTime() - new Date(a.bitis_tarihi).getTime());
-      sonuc = [...aktifler, ...bitmisler];
+      const tamamlanmislar = sonuc
+        .filter((i) => i.durum === "tamamlandi")
+        .sort((a, b) =>
+          new Date(b.kazanan_secim_tarihi ?? b.bitis_tarihi).getTime() -
+          new Date(a.kazanan_secim_tarihi ?? a.bitis_tarihi).getTime()
+        );
+      sonuc = [...aktifler, ...suresiDolmusKazananYok, ...tamamlanmislar];
     }
 
     return sonuc;

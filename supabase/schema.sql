@@ -44,7 +44,7 @@ DROP TYPE IF EXISTS inceleme_durumu CASCADE;
 -- ------------------------------------------------------------
 
 CREATE TYPE kullanici_rol   AS ENUM ('bireysel', 'firma', 'admin');
-CREATE TYPE ihale_durumu    AS ENUM ('aktif', 'beklemede', 'tamamlandi', 'iptal');
+CREATE TYPE ihale_durumu    AS ENUM ('aktif', 'beklemede', 'tamamlandi', 'iptal', 'arsiv');
 CREATE TYPE teklif_durumu   AS ENUM ('beklemede', 'kabul_edildi', 'reddedildi');
 CREATE TYPE belge_turu      AS ENUM ('ruhsat', 'proje', 'sozlesme', 'denetim_raporu', 'fotograf', 'diger', 'tapu', 'vekaletname', 'imza_sirkuleri');
 CREATE TYPE gorusme_durumu  AS ENUM ('beklemede', 'onaylandi', 'reddedildi', 'tamamlandi');
@@ -359,6 +359,12 @@ CREATE TABLE public.ihaleler (
   -- engelleyen zaman damgasi (bkz. /api/cron/sure-uyarisi). NULL iken
   -- henuz uyari gonderilmemis demektir.
   son_uyari_gonderildi   timestamptz,
+  -- Ihale sahibinin sonuc raporundan sectigi kazanan firma ve secim ani
+  -- (30 gunluk arsivleme sayaci bu tarihe gore isler -- bkz.
+  -- ihale_arsivi_migration.sql; updated_at kullanilmaz cunku goruntulenme
+  -- sayaci gibi alakasiz guncellemelerde de degisiyor).
+  secilen_firma_id      uuid REFERENCES public.kullanicilar(id) ON DELETE SET NULL,
+  kazanan_secim_tarihi  timestamptz,
   created_at        timestamptz   NOT NULL DEFAULT now(),
   updated_at        timestamptz   NOT NULL DEFAULT now(),
 

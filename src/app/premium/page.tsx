@@ -77,6 +77,7 @@ const PLANLAR: Plan[] = [
       { metin: "Birebir hesap yöneticisi",           dahil: true },
       { metin: "Özel raporlama ve analizler",        dahil: true },
       { metin: "Şirket içi eğitim",                 dahil: true },
+      { metin: "Tamamlanmış tüm ihalelerin arşivine erişim — fiyat trendleri ve referans için", dahil: true },
     ],
   },
 ];
@@ -195,6 +196,7 @@ export default function PremiumSayfasi() {
                 ["Destek kanalı",            "E-posta",     "E-posta + Tel","Hesap yöneticisi"],
                 ["API erişimi",              "—",           "—",           "✓"],
                 ["SLA garantisi",            "—",           "—",           "%99,9"],
+                ["İhale arşivine erişim",    "—",           "—",           "✓"],
               ].map(([ozellik, ucretsiz, premium, kurumsal]) => (
                 <tr key={ozellik} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-3.5 text-gray-700 font-medium">{ozellik}</td>

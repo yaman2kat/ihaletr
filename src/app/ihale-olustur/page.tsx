@@ -21,7 +21,7 @@ const ORNEK_SARTNAME_DOSYA: Record<string, string> = {
 function ornekSartnameUrl(kategori: string): string | null {
   const dosya = ORNEK_SARTNAME_DOSYA[kategori];
   if (!dosya) return null;
-  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ornek-sartnameler/${dosya}`;
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/sartname-sablonlari/${dosya}`;
 }
 
 const TASLAK_ANAHTARI = "ihale-olustur-taslak";
@@ -125,6 +125,7 @@ export default function IhaleOlustur() {
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState("");
   const [belgeUyarisi, setBelgeUyarisi] = useState<string[] | null>(null);
+  const [sartnameKategoriUyarisi, setSartnameKategoriUyarisi] = useState(false);
   const [onayModaliAcik, setOnayModaliAcik] = useState(false);
   const taslakYuklendiRef = useRef(false);
   const alanRef = useRef<Record<string, HTMLElement | null>>({});
@@ -901,13 +902,25 @@ export default function IhaleOlustur() {
                   onChange={(f) => setDosyalar((d) => ({ ...d, sartname: f }))}
                 />
                 <AlanHatasi alan="sartname" eksikAlanlar={eksikAlanlar} />
-                {ornekSartnameUrl(form.kategori) && (
+                {ornekSartnameUrl(form.kategori) ? (
                   <a
                     href={ornekSartnameUrl(form.kategori)!}
+                    onClick={() => setSartnameKategoriUyarisi(false)}
                     className="text-xs font-medium text-blue-700 hover:underline mt-1.5 inline-block"
                   >
-                    Örnek şartname indir ({form.kategori}) →
+                    Örnek şartname için tıklayın ({form.kategori}) →
                   </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSartnameKategoriUyarisi(true)}
+                    className="text-xs font-medium text-blue-700 hover:underline mt-1.5 inline-block"
+                  >
+                    Örnek şartname için tıklayın →
+                  </button>
+                )}
+                {sartnameKategoriUyarisi && !ornekSartnameUrl(form.kategori) && (
+                  <p className="text-xs text-amber-600 mt-1">Önce ihale türünü seçin</p>
                 )}
               </div>
               <DosyaAlani

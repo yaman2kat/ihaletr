@@ -36,4 +36,5 @@ export const DURUM_BADGE: Partial<Record<IhaleDurumu, { etiket: string; cls: str
   aktif:       { etiket: "Aktif",       cls: "bg-green-100 text-green-700" },
   tamamlandi:  { etiket: "Tamamlandı",  cls: "bg-gray-100 text-gray-600" },
   iptal:       { etiket: "İptal",       cls: "bg-red-100 text-red-600" },
+  arsiv:       { etiket: "Arşivlendi",  cls: "bg-purple-100 text-purple-700" },
 };

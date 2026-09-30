@@ -233,7 +233,7 @@ export default function TeklifKutusu({ ihaleId, kategori, durum, kalanGun, olust
   if (durum !== "aktif") {
     return (
       <button disabled className="block w-full text-center bg-gray-200 text-gray-500 font-semibold py-3 rounded-lg cursor-not-allowed mb-3">
-        {{ beklemede: "Henüz Başlamadı", tamamlandi: "Tamamlandı", iptal: "İptal Edildi" }[durum] ?? durum}
+        {{ beklemede: "Henüz Başlamadı", tamamlandi: "Tamamlandı", iptal: "İptal Edildi", arsiv: "Arşivlendi" }[durum] ?? durum}
       </button>
     );
   }

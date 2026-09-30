@@ -76,6 +76,7 @@ export default function Navbar() {
   // Profil (hesapTuru) henüz yüklenmemişse de gizli kalır (yanlış hesap
   // türüne kısa süreliğine bile gösterilmesin diye).
   const ihaleOlusturGoster = !!kullanici && !adminMi && (hesapTuru === "arsa_sahibi" || hesapTuru === "her_ikisi");
+  const arsivErisimVar = planTuru === "kurumsal";
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
@@ -96,6 +97,20 @@ export default function Navbar() {
               <Link href="/admin" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Yönetim Paneli</Link>
             )}
             <Link href="/danismanlar"   className="text-gray-600 hover:text-blue-700 font-medium transition-colors">Destek</Link>
+            {arsivErisimVar ? (
+              <Link href="/ihale-arsivi" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">İhale Arşivi</Link>
+            ) : (
+              <span className="relative group inline-flex items-center gap-1 text-gray-400 font-medium opacity-40 cursor-not-allowed select-none">
+                İhale Arşivi
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 w-56 text-center text-xs font-normal text-white bg-gray-900 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                  Bu özellik yalnızca Kurumsal plan üyelerine açıktır.
+                </span>
+              </span>
+            )}
           </div>
 
           {/* Masaüstü Auth */}
@@ -184,6 +199,17 @@ export default function Navbar() {
               <Link href="/admin" className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Yönetim Paneli</Link>
             )}
             <Link href="/danismanlar"   className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Destek</Link>
+            {arsivErisimVar ? (
+              <Link href="/ihale-arsivi" className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>İhale Arşivi</Link>
+            ) : (
+              <span className="flex items-center gap-1.5 text-gray-400 font-medium py-2 opacity-40" title="Bu özellik yalnızca Kurumsal plan üyelerine açıktır.">
+                İhale Arşivi
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </span>
+            )}
             <Link href="/premium"       className="text-gray-700 font-medium py-2" onClick={() => setMenuAcik(false)}>Premium</Link>
 
             <div className="border-t border-gray-100 pt-3 mt-1 flex flex-col gap-2">

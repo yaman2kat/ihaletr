@@ -32,7 +32,7 @@ interface ArsaSahibiPanelProps {
 // İhale devam ederken teklif sayısı disinda hicbir bilgi (kim/ne kadar)
 // ihale sahibine bile gosterilmez; bitince tam erisim acilir.
 function ihaleBitmis(ihale: Ihale): boolean {
-  return ihale.durum === "tamamlandi" || (ihale.durum === "aktif" && kalanGun(ihale.bitis_tarihi) <= 0);
+  return ihale.durum === "tamamlandi" || ihale.durum === "arsiv" || (ihale.durum === "aktif" && kalanGun(ihale.bitis_tarihi) <= 0);
 }
 
 // "Karar Bekleniyor" rozeti KASITLI OLARAK yalnizca burada (ihale

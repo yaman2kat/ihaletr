@@ -1,4 +1,4 @@
-export type IhaleDurumu = "aktif" | "beklemede" | "tamamlandi" | "iptal";
+export type IhaleDurumu = "aktif" | "beklemede" | "tamamlandi" | "iptal" | "arsiv";
 export type KullaniciRol = "arsa_sahibi" | "muteahhit";
 export type PlanTuru = "ucretsiz" | "premium" | "kurumsal";
 
@@ -167,6 +167,7 @@ export interface Ihale {
   red_sebebi?: string | null;
   otomatik_sonlandirildi?: boolean;
   secilen_firma_id?: string | null;
+  kazanan_secim_tarihi?: string | null;
   sure_gun?: number | null;
   yayinlanma_tarihi?: string | null;
   sonuc_aciklama_tarihi?: string | null;
